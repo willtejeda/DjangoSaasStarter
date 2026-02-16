@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.test import APIRequestFactory, APIClient
 
@@ -100,6 +101,11 @@ class BillingFeaturesTests(SimpleTestCase):
         claims = {"entitlements": "pro, analytics , team"}
         self.assertEqual(extract_billing_features(claims), ["pro", "analytics", "team"])
 
+    @override_settings(CLERK_BILLING_CLAIM="entitlements")
+    def test_normalizes_and_deduplicates_features(self):
+        claims = {"entitlements": [" Pro ", "pro", "ANALYTICS", "analytics"]}
+        self.assertEqual(extract_billing_features(claims), ["pro", "analytics"])
+
 
 class SupabaseUrlTests(SimpleTestCase):
     def test_adds_https_prefix(self):
@@ -185,13 +191,42 @@ class ClerkWebhookHandlerTests(TestCase):
         self.assertTrue(profile.is_active)
 
     def test_handle_user_deleted_marks_profile_inactive(self):
-        profile = Profile.objects.create(clerk_user_id="user_test_2", email="alive@example.com")
+        profile = Profile.objects.create(
+            clerk_user_id="user_test_2",
+            email="alive@example.com",
+            first_name="Alive",
+            last_name="User",
+            plan_tier=Profile.PlanTier.PRO,
+            billing_features=["pro", "ai_coach"],
+            metadata={"retained": True},
+        )
 
         handle_user_deleted({"id": "user_test_2"})
 
         profile.refresh_from_db()
         self.assertFalse(profile.is_active)
         self.assertEqual(profile.email, "")
+        self.assertEqual(profile.first_name, "")
+        self.assertEqual(profile.last_name, "")
+        self.assertEqual(profile.plan_tier, Profile.PlanTier.FREE)
+        self.assertEqual(profile.billing_features, [])
+        self.assertEqual(profile.metadata, {})
+
+    @override_settings(CLERK_BILLING_CLAIM="billing_features")
+    def test_handle_user_created_uses_configured_billing_claim(self):
+        handle_user_created(
+            {
+                "id": "user_test_3",
+                "first_name": "Taylor",
+                "public_metadata": {
+                    "billing_features": ["Pro", "AI_Coach"],
+                    "entitlements": ["free_only"],
+                },
+            }
+        )
+
+        profile = Profile.objects.get(clerk_user_id="user_test_3")
+        self.assertEqual(profile.billing_features, ["pro", "ai_coach"])
 
 
 class ProjectApiTests(TestCase):
@@ -246,9 +281,62 @@ class ProjectApiTests(TestCase):
         detail_response = self._request("get", f"/api/projects/{own_project.id}/")
         self.assertEqual(detail_response.status_code, 200)
 
+    def test_partial_patch_does_not_require_slug(self):
+        create_response = self._request(
+            "post",
+            "/api/projects/",
+            {
+                "name": "Ship Faster",
+                "summary": "Core SaaS template",
+                "status": "building",
+                "monthly_recurring_revenue": "499.99",
+            },
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        project_id = create_response.data["id"]
+        original_slug = create_response.data["slug"]
+
+        patch_response = self._request(
+            "patch",
+            f"/api/projects/{project_id}/",
+            {"status": "live"},
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(patch_response.data["status"], "live")
+        self.assertEqual(patch_response.data["slug"], original_slug)
+
+    def test_create_project_rejects_negative_mrr(self):
+        response = self._request(
+            "post",
+            "/api/projects/",
+            {
+                "name": "Loss Maker",
+                "summary": "Invalid payload",
+                "status": "idea",
+                "monthly_recurring_revenue": "-1.00",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("monthly_recurring_revenue", response.data)
+
+    def test_feature_check_is_case_insensitive(self):
+        response = self._request("get", "/api/billing/features/?feature=PrO")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["feature"], "pro")
+        self.assertTrue(response.data["enabled"])
+
     def test_cannot_access_other_users_project(self):
         other_profile = Profile.objects.create(clerk_user_id="user_999", email="other@example.com")
         other_project = Project.objects.create(owner=other_profile, name="Other", slug="other")
 
         response = self._request("get", f"/api/projects/{other_project.id}/")
         self.assertEqual(response.status_code, 404)
+
+
+class ProjectModelValidationTests(TestCase):
+    def test_project_save_rejects_whitespace_name(self):
+        owner = Profile.objects.create(clerk_user_id="user_name_invalid")
+
+        with self.assertRaises(DjangoValidationError):
+            Project.objects.create(owner=owner, name="   ", slug="")

@@ -3,41 +3,29 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from django.conf import settings
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .billing import (
+    extract_billing_features as extract_billing_features_from_claims,
+    infer_plan_tier as infer_plan_tier_from_features,
+)
 from .models import Profile, Project
 from .serializers import ProfileSerializer, ProjectSerializer
 from .supabase_client import SupabaseConfigurationError, get_supabase_client
 
 
 def extract_billing_features(claims: dict[str, Any]) -> list[str]:
-    claim_name = getattr(settings, "CLERK_BILLING_CLAIM", "entitlements")
-    value = claims.get(claim_name)
-
-    if isinstance(value, list):
-        return [str(item) for item in value if item]
-
-    if isinstance(value, dict):
-        return [str(feature) for feature, enabled in value.items() if enabled]
-
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-
-    return []
+    """Backward-compatible local wrapper used by existing tests."""
+    return extract_billing_features_from_claims(claims)
 
 
 def infer_plan_tier(features: list[str]) -> str:
-    normalized = {feature.lower() for feature in features}
-    if "enterprise" in normalized:
-        return Profile.PlanTier.ENTERPRISE
-    if {"pro", "premium", "growth"} & normalized:
-        return Profile.PlanTier.PRO
-    return Profile.PlanTier.FREE
+    """Backward-compatible local wrapper used by existing code paths."""
+    return infer_plan_tier_from_features(features)
 
 
 def _safe_str(value: Any) -> str:
@@ -61,10 +49,20 @@ def sync_profile_from_claims(claims: dict[str, Any]) -> Profile | None:
         "is_active": True,
         "metadata": metadata,
     }
-    profile, _ = Profile.objects.update_or_create(
+    profile, created = Profile.objects.get_or_create(
         clerk_user_id=clerk_user_id,
         defaults=defaults,
     )
+
+    if not created:
+        changed_fields: list[str] = []
+        for field_name, field_value in defaults.items():
+            if getattr(profile, field_name) != field_value:
+                setattr(profile, field_name, field_value)
+                changed_fields.append(field_name)
+        if changed_fields:
+            profile.save(update_fields=[*changed_fields, "updated_at"])
+
     return profile
 
 
@@ -127,10 +125,11 @@ class BillingFeatureView(APIView):
         requested_feature = request.query_params.get("feature")
 
         if requested_feature:
+            normalized_feature = str(requested_feature).strip().lower()
             return Response(
                 {
-                    "feature": requested_feature,
-                    "enabled": requested_feature in enabled_features,
+                    "feature": normalized_feature,
+                    "enabled": normalized_feature in enabled_features,
                 }
             )
 

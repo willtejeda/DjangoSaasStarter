@@ -44,16 +44,31 @@ class ProjectSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "created_at", "updated_at")
 
+    def validate_name(self, value: str) -> str:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            raise serializers.ValidationError("Name cannot be empty.")
+        return cleaned
+
     def validate_slug(self, value: str) -> str:
-        if not value:
-            raise serializers.ValidationError("Slug cannot be empty.")
-        return slugify(value)
+        return slugify(value or "")
+
+    def validate_monthly_recurring_revenue(self, value):
+        if value < 0:
+            raise serializers.ValidationError("MRR cannot be negative.")
+        return value
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        name = attrs.get("name")
-        if not attrs.get("slug"):
-            attrs["slug"] = slugify(name or "")
+        instance = getattr(self, "instance", None)
+        effective_name = attrs.get("name", getattr(instance, "name", ""))
+        effective_slug = attrs.get("slug", getattr(instance, "slug", ""))
+        if not effective_slug:
+            effective_slug = slugify(effective_name or "")
+        else:
+            effective_slug = slugify(effective_slug)
+
+        attrs["slug"] = effective_slug
         if not attrs.get("slug"):
             raise serializers.ValidationError({"slug": "Slug is required."})
         return attrs

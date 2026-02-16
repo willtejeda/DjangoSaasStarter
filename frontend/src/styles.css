@@ -135,6 +135,38 @@ code {
   gap: 0.45rem;
 }
 
+.billing-example-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.billing-plan-card {
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.95);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.billing-plan-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.plan-price {
+  font-weight: 700;
+  color: var(--brand-ink);
+}
+
+.plan-audience {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -356,6 +388,50 @@ select:focus {
   font-weight: 600;
 }
 
+.paywall-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.paywall-card {
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.95);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.paywall-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.56rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-chip-live {
+  background: rgba(41, 171, 85, 0.2);
+  color: #186a37;
+}
+
+.status-chip-locked {
+  background: rgba(231, 135, 54, 0.2);
+  color: #84461e;
+}
+
 .helper-text {
   color: var(--muted);
   font-size: 0.83rem;
@@ -364,7 +440,9 @@ select:focus {
 @media (max-width: 980px) {
   .grid-three,
   .metrics-grid,
-  .split-grid {
+  .split-grid,
+  .billing-example-grid,
+  .paywall-grid {
     grid-template-columns: 1fr;
   }
 

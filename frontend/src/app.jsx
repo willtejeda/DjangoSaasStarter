@@ -13,6 +13,46 @@ import { authedRequest, getApiBaseUrl } from './lib/api';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const PROJECT_STATUSES = ['idea', 'building', 'live', 'paused'];
+const B2C_PLAN_EXAMPLES = [
+  {
+    name: 'Free',
+    price: '$0',
+    audience: 'Activation and habit formation',
+    entitlements: ['onboarding', 'daily_checkin', 'community_feed']
+  },
+  {
+    name: 'Plus',
+    price: '$12/mo',
+    audience: 'Committed users ready for consistency',
+    entitlements: ['onboarding', 'daily_checkin', 'smart_reminders', 'weekly_reports']
+  },
+  {
+    name: 'Pro',
+    price: '$29/mo',
+    audience: 'Power users who pay for speed and outcomes',
+    entitlements: ['onboarding', 'daily_checkin', 'smart_reminders', 'weekly_reports', 'ai_coach', 'priority_support']
+  }
+];
+const B2C_PAYWALL_EXAMPLES = [
+  {
+    feature: 'smart_reminders',
+    title: 'Adaptive reminders',
+    lockedCopy: 'Free tier gets one fixed reminder slot per day.',
+    unlockedCopy: 'Paid users get behavior-based reminder timing and retry nudges.'
+  },
+  {
+    feature: 'weekly_reports',
+    title: 'Progress reports',
+    lockedCopy: 'Show a teaser chart and gate full trend history.',
+    unlockedCopy: 'Unlock weekly retention and streak reports with export support.'
+  },
+  {
+    feature: 'ai_coach',
+    title: 'AI coach',
+    lockedCopy: 'Offer one preview response, then route to upgrade.',
+    unlockedCopy: 'Unlock unlimited coaching prompts and custom plans.'
+  }
+];
 
 function formatCurrency(value) {
   const numeric = Number(value || 0);
@@ -89,6 +129,31 @@ function MarketingShell() {
           <li>Preact dashboard connected to real backend data</li>
         </ul>
       </section>
+
+      <section className="panel">
+        <h2>B2C billing examples you can copy</h2>
+        <div className="billing-example-grid">
+          {B2C_PLAN_EXAMPLES.map((plan) => (
+            <article className="billing-plan-card" key={plan.name}>
+              <div className="billing-plan-header">
+                <h3>{plan.name}</h3>
+                <span className="plan-price">{plan.price}</span>
+              </div>
+              <p className="plan-audience">{plan.audience}</p>
+              <div className="feature-list">
+                {plan.entitlements.map((entitlement) => (
+                  <span className="feature-tag" key={`${plan.name}-${entitlement}`}>
+                    {entitlement}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="helper-text">
+          Mirror these keys in Clerk entitlements and keep <code>CLERK_BILLING_CLAIM=entitlements</code>.
+        </p>
+      </section>
     </main>
   );
 }
@@ -140,6 +205,10 @@ function Dashboard() {
 
   const enabledFeatures = billing.enabled_features || me?.billing_features || [];
   const planTier = me?.profile?.plan_tier || inferPlanFromFeatures(enabledFeatures);
+  const normalizedEnabledFeatures = useMemo(
+    () => new Set(enabledFeatures.map((feature) => String(feature).toLowerCase())),
+    [enabledFeatures]
+  );
 
   const totalMrr = useMemo(
     () => projects.reduce((sum, project) => sum + Number(project.monthly_recurring_revenue || 0), 0),
@@ -245,7 +314,7 @@ function Dashboard() {
                 type="text"
                 value={form.name}
                 onInput={(event) => setForm((state) => ({ ...state, name: event.currentTarget.value }))}
-                placeholder="Profit Sprint"
+                placeholder="FocusFlow Mobile"
               />
             </label>
             <label>
@@ -254,7 +323,7 @@ function Dashboard() {
                 rows="3"
                 value={form.summary}
                 onInput={(event) => setForm((state) => ({ ...state, summary: event.currentTarget.value }))}
-                placeholder="What this product does and why it wins"
+                placeholder="B2C habit app with free onboarding and paid coaching upgrades"
               />
             </label>
             <label>
@@ -279,7 +348,7 @@ function Dashboard() {
           <h2>Execution queue</h2>
           {loading ? <p>Loading projects...</p> : null}
           {!loading && projects.length === 0 ? (
-            <p>No projects yet. Add one and start validating demand this week.</p>
+            <p>No projects yet. Add one and validate your paywall conversion this week.</p>
           ) : null}
           <div className="project-list">
             {projects.map((project) => (
@@ -342,6 +411,29 @@ function Dashboard() {
           </div>
           <p className="helper-text">API: <code>{apiBase}</code></p>
         </article>
+      </section>
+
+      <section className="panel">
+        <h2>B2C paywall examples</h2>
+        <div className="paywall-grid">
+          {B2C_PAYWALL_EXAMPLES.map((entry) => {
+            const unlocked = normalizedEnabledFeatures.has(entry.feature.toLowerCase());
+            return (
+              <article className="paywall-card" key={entry.feature}>
+                <div className="paywall-card-header">
+                  <h3>{entry.title}</h3>
+                  <span className={`status-chip ${unlocked ? 'status-chip-live' : 'status-chip-locked'}`}>
+                    {unlocked ? 'Unlocked' : 'Upgrade'}
+                  </span>
+                </div>
+                <p>{unlocked ? entry.unlockedCopy : entry.lockedCopy}</p>
+                <p className="helper-text">
+                  Entitlement key: <code>{entry.feature}</code>
+                </p>
+              </article>
+            );
+          })}
+        </div>
       </section>
     </main>
   );

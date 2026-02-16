@@ -16,6 +16,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
+from .billing import extract_billing_features, infer_plan_tier
 from .models import Profile
 
 logger = logging.getLogger(__name__)
@@ -75,24 +76,12 @@ def _extract_billing_features(data: dict[str, Any]) -> list[str]:
     public_metadata = data.get("public_metadata", {})
     if not isinstance(public_metadata, dict):
         return []
-
-    entitlements = public_metadata.get("entitlements")
-    if isinstance(entitlements, list):
-        return [str(item).strip() for item in entitlements if item]
-    if isinstance(entitlements, dict):
-        return [str(feature).strip() for feature, enabled in entitlements.items() if enabled]
-    if isinstance(entitlements, str):
-        return [segment.strip() for segment in entitlements.split(",") if segment.strip()]
-    return []
+    claim_name = getattr(settings, "CLERK_BILLING_CLAIM", "entitlements")
+    return extract_billing_features(public_metadata, claim_name=claim_name)
 
 
 def _infer_plan_tier(features: list[str]) -> str:
-    normalized = {feature.lower() for feature in features}
-    if "enterprise" in normalized:
-        return Profile.PlanTier.ENTERPRISE
-    if {"pro", "premium", "growth"} & normalized:
-        return Profile.PlanTier.PRO
-    return Profile.PlanTier.FREE
+    return infer_plan_tier(features)
 
 
 def _profile_defaults_from_clerk_user(data: dict[str, Any]) -> dict[str, Any]:
@@ -151,6 +140,12 @@ def handle_user_deleted(data: dict[str, Any]) -> None:
     Profile.objects.filter(clerk_user_id=clerk_user_id).update(
         is_active=False,
         email="",
+        first_name="",
+        last_name="",
+        image_url="",
+        plan_tier=Profile.PlanTier.FREE,
+        billing_features=[],
+        metadata={},
     )
     logger.info("Clerk user deleted: %s", clerk_user_id)
 

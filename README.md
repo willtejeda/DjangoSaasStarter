@@ -144,6 +144,76 @@ When using cookie auth on unsafe methods (`POST`, `PATCH`, `DELETE`, etc.), CSRF
 
 Billing access is inferred from Clerk JWT claims. The backend reads `CLERK_BILLING_CLAIM` (default `entitlements`) and exposes feature checks through `/api/billing/features/`.
 
+### B2C SaaS plan example
+
+Use a simple entitlement model where each paid tier adds outcome-driven capabilities:
+
+| Plan | Price | Entitlements | UX behavior |
+|---|---|---|---|
+| Free | `$0` | `onboarding`, `daily_checkin`, `community_feed` | Fast activation, preview paid value, strong upgrade prompts |
+| Plus | `$12/mo` | `onboarding`, `daily_checkin`, `smart_reminders`, `weekly_reports` | Improves consistency and retention |
+| Pro | `$29/mo` | `onboarding`, `daily_checkin`, `smart_reminders`, `weekly_reports`, `ai_coach`, `priority_support` | Premium automation and support |
+
+### Supported claim payload examples
+
+`extract_billing_features()` supports list, object, and CSV claims:
+
+```json
+{ "entitlements": ["smart_reminders", "weekly_reports"] }
+```
+
+```json
+{ "entitlements": { "smart_reminders": true, "ai_coach": false, "weekly_reports": 1 } }
+```
+
+```json
+{ "entitlements": "smart_reminders, weekly_reports, ai_coach" }
+```
+
+### API checks you can copy
+
+```bash
+# Full entitlement list for the signed-in user
+curl -H "Authorization: Bearer <clerk-jwt>" \
+  http://127.0.0.1:8000/api/billing/features/
+```
+
+```bash
+# Single feature check for paywall decisions
+curl -H "Authorization: Bearer <clerk-jwt>" \
+  "http://127.0.0.1:8000/api/billing/features/?feature=ai_coach"
+```
+
+### Frontend gating snippet
+
+```js
+const billing = await authedRequest(getToken, '/billing/features/');
+const enabled = new Set((billing.enabled_features || []).map((item) => item.toLowerCase()));
+const canUseAICoach = enabled.has('ai_coach');
+```
+
+Note: Clerk session tokens have size limits. Keep entitlements compact and store large data separately.
+
+## Enterprise Hardening (ORM Source of Truth)
+
+The starter now enforces key invariants at the Django ORM and database layer:
+
+- `Project` integrity checks:
+  - non-empty `name` and `slug`
+  - non-negative `monthly_recurring_revenue`
+  - unique `(owner, slug)` via named DB constraint
+- Canonical project normalization in model `clean()`:
+  - trims fields
+  - auto-slugifies from `name` when needed
+- Query-performance indexes for common access patterns:
+  - `project(owner, status)`
+  - `project(owner, updated_at)`
+  - `profile(plan_tier, is_active)`
+- Shared entitlement parsing across JWT + webhooks in `backend/api/billing.py`
+  - normalized lowercase feature keys
+  - deduplicated feature lists
+  - support for list/object/CSV claim formats
+
 ## Webhooks
 
 1. Create endpoint in Clerk Dashboard -> Webhooks
