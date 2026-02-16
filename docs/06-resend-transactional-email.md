@@ -13,7 +13,7 @@ DjangoStarter uses Resend for product lifecycle emails and keeps Clerk for auth 
 
 ## Current implementation
 
-File: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tools/email/resend.py`
+File: `./backend/api/tools/email/resend.py`
 
 Highlights:
 

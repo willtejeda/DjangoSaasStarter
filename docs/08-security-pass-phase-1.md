@@ -24,7 +24,7 @@ No secret keys are read in browser code.
 
 Change made:
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api.ts` now masks raw 5xx details by default.
+- `./frontend/src/lib/api.ts` now masks raw 5xx details by default.
 - Optional local override added: `VITE_EXPOSE_BACKEND_ERRORS=true`.
 
 Impact:
@@ -35,7 +35,7 @@ Impact:
 
 Change made:
 
-- Added toast system in `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/toast.tsx`.
+- Added toast system in `./frontend/src/components/feedback/toast.tsx`.
 
 Impact:
 
@@ -52,7 +52,7 @@ Risk:
 
 Change made:
 
-- Removed `private_metadata` from `/api/me/clerk/` response in `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/views_modules/common.py`.
+- Removed `private_metadata` from `/api/me/clerk/` response in `./backend/api/views_modules/common.py`.
 
 ### 2. Supabase and Clerk error internals could leak in production
 
@@ -65,8 +65,8 @@ Change made:
 
 Change made:
 
-- Added logging config in `/Users/will/Code/CodexProjects/DjangoStarter/backend/project_settings/settings.py`.
-- Added `DJANGO_LOG_LEVEL` and `API_LOG_LEVEL` in `/Users/will/Code/CodexProjects/DjangoStarter/backend/.env.example`.
+- Added logging config in `./backend/project_settings/settings.py`.
+- Added `DJANGO_LOG_LEVEL` and `API_LOG_LEVEL` in `./backend/.env.example`.
 - Added structured logs for order creation, order confirmation, preflight email sends, download link generation, and booking creation.
 
 Impact:

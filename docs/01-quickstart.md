@@ -12,7 +12,7 @@ Goal: run the stack locally and pass preflight validation before writing custom 
 ## 2. Backend setup
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -26,7 +26,7 @@ Backend URL: `http://127.0.0.1:8000`
 ## 3. Frontend setup
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -36,14 +36,14 @@ Frontend URL: `http://127.0.0.1:5173`
 
 ## 4. Required env values first
 
-`/Users/will/Code/CodexProjects/DjangoStarter/frontend/.env`
+`./frontend/.env`
 
 ```bash
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
 VITE_API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
-`/Users/will/Code/CodexProjects/DjangoStarter/backend/.env`
+`./backend/.env`
 
 ```bash
 DJANGO_SECRET_KEY=replace-this-value
@@ -91,7 +91,7 @@ Expected fresh catalog response is `[]`.
 ## 8. Start scripts
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter
+cd .
 ./start.sh
 ```
 
@@ -105,10 +105,10 @@ Flags:
 ## 9. Quality checks
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
 
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 npm run build
 ```

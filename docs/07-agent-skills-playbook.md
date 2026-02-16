@@ -44,10 +44,10 @@ Before finalizing a skill, answer from beginner viewpoint:
 ## Example validation block
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 npm run build
 ```
 
@@ -59,5 +59,5 @@ Good: "Add usage limit model for image generation and expose summary API with te
 
 ## Related files
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/agent-skills/README.md`
-- `/Users/will/Code/CodexProjects/DjangoStarter/AGENTS.md`
+- `./agent-skills/README.md`
+- `./AGENTS.md`

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import { FrontendBackendExamples } from './frontend-backend-examples';
 import { SignalSandboxExample } from './signal-sandbox-example';
-import { buttonSecondary, cardClass, sectionClass } from '../app-shell/ui-utils';
+import { buttonSecondary, cardClass, sectionClass } from '../../shared/ui-utils';
 
 interface ExamplesPageProps {
   onNavigate: (nextPath: string) => void;

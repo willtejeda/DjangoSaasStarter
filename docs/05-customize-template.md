@@ -10,7 +10,7 @@ Before coding, answer:
 2. What result do they buy?
 3. What unlocks immediately after payment?
 
-Update these first in `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/app.tsx`.
+Update these first in `./frontend/src/app.tsx`.
 
 ## Modular delete map
 
@@ -34,17 +34,21 @@ Update these first in `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src
 
 ## Backend module map
 
-- Models: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/models/`
-- Views: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/views_modules/`
-- Tools: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tools/`
-- Webhooks: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/webhooks/`
+- Models: `./backend/api/models/`
+- Views: `./backend/api/views_modules/`
+- Tools: `./backend/api/tools/`
+- Webhooks: `./backend/api/webhooks/`
 
 ## Frontend module map
 
-- App shell and routes: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/app.tsx`
-- API client: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api.ts`
-- UI utilities: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/ui-utils.ts`
-- Example-only code: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/`
+- App shell and routes: `./frontend/src/app.tsx`
+- Route map composition: `./frontend/src/routes/index.tsx`
+- Public route pages: `./frontend/src/routes/public/routes.tsx`
+- Signed-in account pages: `./frontend/src/routes/app/routes.tsx`
+- API client: `./frontend/src/lib/api.ts`
+- UI utilities: `./frontend/src/shared/ui-utils.ts`
+- Layout and nav components: `./frontend/src/components/layout/app-shell.tsx`
+- Example-only code: `./frontend/src/components/examples/`
 
 ## Recommended first customizations
 
@@ -53,6 +57,15 @@ Update these first in `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src
 3. Add your own entitlement keys
 4. Replace AI usage placeholders with real provider telemetry
 5. Add onboarding emails and support automations
+
+## Add a new frontend page
+
+1. Create the page component in either:
+   - `./frontend/src/routes/public/routes.tsx`, or
+   - `./frontend/src/routes/app/routes.tsx`
+2. Wire route matching in `./frontend/src/routes/index.tsx`.
+3. Add sidebar and top-nav links if needed via `./frontend/src/components/layout/app-shell.tsx`.
+4. Run `npm run typecheck` and `npm run build`.
 
 ## Growth checklist
 

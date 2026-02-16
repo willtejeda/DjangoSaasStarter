@@ -2,7 +2,7 @@ import { computed, signal } from '@preact/signals-react';
 import { useSignals } from '@preact/signals-react/runtime';
 import type { ReactElement } from 'react';
 
-import { buttonGhost, buttonSecondary } from '../app-shell/ui-utils';
+import { buttonGhost, buttonSecondary } from '../../shared/ui-utils';
 
 const launchCounterSignal = signal(1);
 const launchCounterDoubleSignal = computed(() => launchCounterSignal.value * 2);

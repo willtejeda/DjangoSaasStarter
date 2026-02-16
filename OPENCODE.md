@@ -1,6 +1,6 @@
 # OpenCode Notes
 
-Read `/Users/will/Code/CodexProjects/DjangoStarter/AGENTS.md` first.
+Read `./AGENTS.md` first.
 
 Default assumptions:
 

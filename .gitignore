@@ -363,3 +363,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+docs/11-name-ideas.md

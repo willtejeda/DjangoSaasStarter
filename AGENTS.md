@@ -40,11 +40,15 @@ Backend API is split for modular work:
 Frontend:
 
 - `frontend/src/lib/api.ts`: API wrappers for all server interaction
-- `frontend/src/features/app-shell/types.ts`: shared payload types
-- `frontend/src/features/app-shell/ui-utils.ts`: shared UI helpers
-- `frontend/src/features/app-shell/toast.tsx`: user feedback notifications
-- `frontend/src/features/examples/`: non-essential demos and reference snippets
-- `frontend/src/app.tsx`: page composition and integration wiring
+- `frontend/src/shared/types.ts`: shared payload types
+- `frontend/src/shared/ui-utils.ts`: shared UI helpers
+- `frontend/src/components/layout/app-shell.tsx`: shared nav/layout and page primitives
+- `frontend/src/components/feedback/toast.tsx`: user feedback notifications
+- `frontend/src/routes/public/routes.tsx`: signed-out and shared route pages
+- `frontend/src/routes/app/routes.tsx`: signed-in account route pages
+- `frontend/src/routes/index.tsx`: route composition and route map
+- `frontend/src/components/examples/`: non-essential demos and reference snippets
+- `frontend/src/app.tsx`: app bootstrap and auth-aware shell selection
 
 ## Non Negotiables
 
@@ -112,7 +116,7 @@ Output required:
 
 ### Step 2: Adapt marketing surfaces first
 
-Edit `frontend/src/app.tsx` before deep backend changes.
+Edit `frontend/src/routes/public/routes.tsx` first for marketing surfaces, then adjust `frontend/src/routes/index.tsx` if route behavior changes.
 
 Minimum updates:
 
@@ -326,3 +330,4 @@ Start here:
 - `docs/07-agent-skills-playbook.md`
 - `docs/08-security-pass-phase-1.md`
 - `docs/09-agent-frameworks-2026.md`
+- `docs/10-agent-framework-examples.md`

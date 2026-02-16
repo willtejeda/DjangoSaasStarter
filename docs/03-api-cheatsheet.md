@@ -45,7 +45,7 @@ Base URL: `http://127.0.0.1:8000/api`
 ### 1. Read product catalog
 
 ```ts
-import { apiRequest } from '/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api';
+import { apiRequest } from './frontend/src/lib/api';
 
 const products = await apiRequest<Array<{ id: number; slug: string; name: string }>>('/products/');
 ```
@@ -53,7 +53,7 @@ const products = await apiRequest<Array<{ id: number; slug: string; name: string
 ### 2. Create pending order
 
 ```ts
-import { authedRequest } from '/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api';
+import { authedRequest } from './frontend/src/lib/api';
 import { useAuth } from '@clerk/clerk-react';
 
 const { getToken } = useAuth();

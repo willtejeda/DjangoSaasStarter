@@ -81,3 +81,7 @@ This avoids browser-only fragility and keeps critical tool actions server-side.
 
 - Release dates and project activity were verified on February 16, 2026.
 - OpenAI-compatible provider compatibility is inferred from each framework's model provider integrations unless explicitly documented as OpenRouter-native.
+
+## Next read
+
+- `./docs/10-agent-framework-examples.md` for side-by-side implementation snippets and permission setup notes.

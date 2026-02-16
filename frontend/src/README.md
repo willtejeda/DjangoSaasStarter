@@ -1,27 +1,45 @@
 # Frontend Module Layout
 
-The frontend is designed for fast customization with minimal frontend expertise.
+The frontend is intentionally split into route modules, reusable UI components, and shared helpers so React developers can navigate it quickly.
 
 ## Entry points
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/main.tsx`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/app.tsx`
+- `./frontend/src/main.tsx`
+- `./frontend/src/app.tsx`
 
-## Core app modules
+## Folder architecture
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api.ts`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/signals.ts`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/types.ts`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/ui-utils.ts`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/toast.tsx`
+- `routes`: route composition and page modules
+- `components`: reusable UI building blocks
+- `shared`: shared types and style helpers
+- `lib`: API and app-level utility modules
+- `public`: static assets copied by Vite at build time
+
+## Core route modules
+
+- `./frontend/src/routes/index.tsx`
+- `./frontend/src/routes/public/routes.tsx`
+- `./frontend/src/routes/app/routes.tsx`
+
+## Shared component modules
+
+- `./frontend/src/components/layout/app-shell.tsx`
+- `./frontend/src/components/feedback/toast.tsx`
+
+## Shared helper modules
+
+- `./frontend/src/shared/types.ts`
+- `./frontend/src/shared/ui-utils.ts`
+- `./frontend/src/lib/api.ts`
+- `./frontend/src/lib/signals.ts`
 
 ## Example-only modules
 
 Everything non-essential for production UX lives here:
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/examples-page.tsx`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/frontend-backend-examples.tsx`
-- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/signal-sandbox-example.tsx`
+- `./frontend/src/components/examples/examples-page.tsx`
+- `./frontend/src/components/examples/frontend-backend-examples.tsx`
+- `./frontend/src/components/examples/signal-sandbox-example.tsx`
 
 Route: `/examples`
 

@@ -2,31 +2,31 @@
 
 ## Directory structure
 
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/models/`
+- `./backend/api/models/`
   - `accounts.py`
   - `catalog.py`
   - `commerce.py`
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/serializers/`
+- `./backend/api/serializers/`
   - `common.py`
   - `catalog.py`
   - `commerce.py`
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/views_modules/`
+- `./backend/api/views_modules/`
   - `common.py`
   - `account.py`
   - `seller.py`
   - `helpers.py`
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/webhooks/`
+- `./backend/api/webhooks/`
   - `verification.py`
   - `helpers.py`
   - `handlers.py`
   - `receiver.py`
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tools/`
+- `./backend/api/tools/`
   - `auth/`
   - `billing/`
   - `database/`
   - `email/`
   - `storage/`
-- `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tests/`
+- `./backend/api/tests/`
 
 ## Contracts
 
@@ -43,7 +43,7 @@
 ## Key commands
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
 ```

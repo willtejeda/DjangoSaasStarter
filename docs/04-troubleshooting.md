@@ -79,10 +79,10 @@ VITE_EXPOSE_BACKEND_ERRORS=true
 ## Build or test commands
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
 
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 npm run build
 ```

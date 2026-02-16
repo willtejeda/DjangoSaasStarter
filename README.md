@@ -58,24 +58,26 @@ If these fail, fix integrations before writing product-specific code.
 
 Read in this order:
 
-1. `/Users/will/Code/CodexProjects/DjangoStarter/docs/README.md`
-2. `/Users/will/Code/CodexProjects/DjangoStarter/docs/01-quickstart.md`
-3. `/Users/will/Code/CodexProjects/DjangoStarter/docs/02-first-revenue-loop.md`
-4. `/Users/will/Code/CodexProjects/DjangoStarter/docs/03-api-cheatsheet.md`
-5. `/Users/will/Code/CodexProjects/DjangoStarter/docs/04-troubleshooting.md`
-6. `/Users/will/Code/CodexProjects/DjangoStarter/docs/05-customize-template.md`
-7. `/Users/will/Code/CodexProjects/DjangoStarter/docs/06-resend-transactional-email.md`
-8. `/Users/will/Code/CodexProjects/DjangoStarter/docs/07-agent-skills-playbook.md`
-9. `/Users/will/Code/CodexProjects/DjangoStarter/docs/08-security-pass-phase-1.md`
-10. `/Users/will/Code/CodexProjects/DjangoStarter/docs/09-agent-frameworks-2026.md`
-11. `/Users/will/Code/CodexProjects/DjangoStarter/docs/StackAnalysis.md`
+1. `./docs/README.md`
+2. `./docs/01-quickstart.md`
+3. `./docs/02-first-revenue-loop.md`
+4. `./docs/03-api-cheatsheet.md`
+5. `./docs/04-troubleshooting.md`
+6. `./docs/05-customize-template.md`
+7. `./docs/06-resend-transactional-email.md`
+8. `./docs/07-agent-skills-playbook.md`
+9. `./docs/08-security-pass-phase-1.md`
+10. `./docs/09-agent-frameworks-2026.md`
+11. `./docs/10-agent-framework-examples.md`
+12. `./docs/11-name-ideas.md`
+13. `./docs/StackAnalysis.md`
 
 ## Quick start
 
 ### Backend
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -87,7 +89,7 @@ python3 manage.py runserver
 ### Frontend
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -96,30 +98,35 @@ npm run dev
 ## Quality gates
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
 
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 npm run build
 ```
 
 ## Frontend map
 
-- Main app shell: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/app.tsx`
-- API client: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api.ts`
-- Shared UI helpers: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/ui-utils.ts`
-- Examples route modules: `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/`
+- App bootstrap: `./frontend/src/app.tsx`
+- Route composition: `./frontend/src/routes/index.tsx`
+- Public and shared pages: `./frontend/src/routes/public/routes.tsx`
+- Signed-in app pages: `./frontend/src/routes/app/routes.tsx`
+- Layout components: `./frontend/src/components/layout/app-shell.tsx`
+- Feedback components: `./frontend/src/components/feedback/toast.tsx`
+- API client: `./frontend/src/lib/api.ts`
+- Shared helper modules: `./frontend/src/shared/`
+- Example modules: `./frontend/src/components/examples/`
 
 ## Backend map
 
-- Domain models: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/models/`
-- API views: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/views_modules/`
-- Integrations and tools: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tools/`
-- Webhooks: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/webhooks/`
-- Tests: `/Users/will/Code/CodexProjects/DjangoStarter/backend/api/tests/`
+- Domain models: `./backend/api/models/`
+- API views: `./backend/api/views_modules/`
+- Integrations and tools: `./backend/api/tools/`
+- Webhooks: `./backend/api/webhooks/`
+- Tests: `./backend/api/tests/`
 
 ## Agent docs
 
-- Agent contract: `/Users/will/Code/CodexProjects/DjangoStarter/AGENTS.md`
-- Agent skill templates: `/Users/will/Code/CodexProjects/DjangoStarter/agent-skills/README.md`
+- Agent contract: `./AGENTS.md`
+- Agent skill templates: `./agent-skills/README.md`
