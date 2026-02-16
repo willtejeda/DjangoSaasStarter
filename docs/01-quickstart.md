@@ -11,7 +11,7 @@ Goal: run the app locally and confirm the stack is healthy.
 ## 2. Backend setup
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -27,7 +27,7 @@ Backend will run on `http://127.0.0.1:8000`.
 Open a second terminal:
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -85,7 +85,7 @@ Open `http://127.0.0.1:5173` and verify the marketing homepage loads.
 From repo root:
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter
+cd .
 ./start.sh
 ```
 
@@ -94,10 +94,10 @@ This starts backend and frontend together.
 ## 7. Quality checks before commit
 
 ```bash
-cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+cd ./backend
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
 
-cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+cd ./frontend
 npm run build
 ```
