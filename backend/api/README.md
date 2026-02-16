@@ -1,61 +1,84 @@
 # API Module Layout
 
-`api` is organized by responsibility so new code has a clear home.
+`api/` is split by responsibility so contributors and agents can change one area without scanning a monolith.
 
-## Entry points
+## Top-level map
 
-- `urls.py`: route definitions.
-- `views.py`: stable export surface used by `urls.py` and any legacy imports.
+- `urls.py`: route declarations.
+- `views.py`: stable export facade used by `urls.py`.
+- `admin.py`: Django admin registrations.
+- `middleware.py`: optional request middleware.
 
-## Tools
+## `models/` package
 
-`tools/` is the canonical home for infrastructure and integration utilities.
+Django model classes are grouped by domain:
 
-- `tools/auth/clerk.py`: Clerk JWT verification plus Clerk Backend SDK client helpers.
-- `tools/auth/authentication.py`: DRF authentication class (`ClerkJWTAuthentication`).
-- `tools/email/resend.py`: transactional email senders and Resend integration.
-- `tools/database/supabase.py`: Supabase client and configuration helpers.
-- `tools/storage/block_storage.py`: signed download URL generation (Supabase or S3).
+- `models/accounts.py`
+  - `Profile`
+  - `Project`
+  - `CustomerAccount`
+- `models/catalog.py`
+  - `Product`
+  - `Price`
+  - `DigitalAsset`
+  - `ServiceOffer`
+- `models/commerce.py`
+  - `Order`
+  - `OrderItem`
+  - `Subscription`
+  - `PaymentTransaction`
+  - `WebhookEvent`
+  - `Entitlement`
+  - `DownloadGrant`
+  - `Booking`
+- `models/__init__.py`: canonical export surface (`from api.models import ...`).
 
-## View modules
-
-- `views_modules/helpers.py`: shared request context, claim parsing, profile/account sync, and utility helpers.
-- `views_modules/common.py`: public and general authenticated views (`/health`, `/me`, `/projects`, `/products`, `/supabase/profile`, `/me/clerk`, AI helpers).
-- `views_modules/account.py`: account, checkout, order confirmation, downloads, bookings, and payment fulfillment helpers.
-- `views_modules/seller.py`: seller catalog management for products, prices, assets, and service offers.
-
-## Serializers
-
-`serializers/` is split by domain:
+## `serializers/` package
 
 - `serializers/common.py`: profile and project serializers.
 - `serializers/catalog.py`: public and seller catalog serializers.
 - `serializers/commerce.py`: account, order, subscription, entitlement, download, and booking serializers.
-- `serializers/__init__.py`: export surface consumed by views.
+- `serializers/__init__.py`: canonical serializer exports.
 
-## Domain modules
+## `views_modules/` package
 
-- `models.py`: Django data models.
-- `webhooks.py`: Clerk webhook verification and event handlers.
-- `billing.py`: billing feature extraction and tier inference helpers.
-- `tests.py`: API and integration tests.
+- `views_modules/helpers.py`: shared request context helpers and AI usage payload helpers.
+- `views_modules/common.py`: health, profile, project, public product, AI, and Supabase probe endpoints.
+- `views_modules/account.py`: buyer account endpoints and order fulfillment flow.
+- `views_modules/seller.py`: seller catalog and pricing management endpoints.
 
-## Compatibility shims
+## `tools/` package
 
-These files remain as import-stable shims and forward to canonical modules:
+External integration and platform utility code lives here:
 
-- `authentication.py`
-- `clerk.py`
-- `clerk_client.py`
-- `emails.py`
-- `supabase_client.py`
-- `block_storage.py`
+- `tools/auth/`: Clerk JWT verification and DRF auth.
+- `tools/billing/`: billing claim parsing and plan tier inference.
+- `tools/database/`: Supabase client configuration.
+- `tools/email/`: Resend transactional email helpers.
+- `tools/storage/`: signed download URL generation for Supabase and S3-compatible storage.
 
-## Rule for future changes
+## `webhooks/` package
 
-When adding a view or utility:
+Clerk webhook processing is split for clarity:
 
-1. Put implementation in the appropriate canonical package (`views_modules/`, `tools/`, `serializers/`).
-2. Re-export from the relevant facade (`views.py` or `serializers/__init__.py`) when needed.
-3. Add route wiring in `urls.py` for new endpoints.
-4. Add or update tests in `tests.py`.
+- `webhooks/verification.py`: Svix signature verification.
+- `webhooks/helpers.py`: payload parsing and lookup utilities.
+- `webhooks/handlers.py`: webhook event handlers and event map.
+- `webhooks/receiver.py`: Django view that verifies, deduplicates, and dispatches events.
+- `webhooks/__init__.py`: canonical exports (`from api.webhooks import ...`).
+
+## `tests/` package
+
+Tests are grouped by concern:
+
+- `tests/test_auth.py`: auth, billing-claim parsing, and Supabase URL helper tests.
+- `tests/test_webhooks.py`: webhook verification, event mapping, and user sync handlers.
+- `tests/test_project_api.py`: me/projects/ai/preflight tests.
+- `tests/test_commerce_api.py`: checkout, fulfillment, downloads, booking, and security flags.
+
+## Change rules
+
+1. Keep domain logic in the domain package (`models/`, `webhooks/`, `views_modules/`, `tools/`).
+2. Keep `views.py`, `serializers/__init__.py`, and `models/__init__.py` as import-stable facades.
+3. Add or update tests in `tests/` with the same domain split.
+4. Run backend tests and deploy checks after structural edits.

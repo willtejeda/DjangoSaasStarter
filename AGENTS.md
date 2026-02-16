@@ -26,6 +26,24 @@ DjangoStarter is a self-hosted-first SaaS starter for Python builders who want:
 - Email: Resend
 - Deployment baseline: Coolify + self-hosted app and Supabase
 
+## Module Map for Agents
+
+Backend API is split for modular work:
+
+- `backend/api/models/`: domain model modules (`accounts.py`, `catalog.py`, `commerce.py`)
+- `backend/api/serializers/`: serializer modules by domain
+- `backend/api/views_modules/`: API views by domain
+- `backend/api/webhooks/`: webhook verification, handlers, and receiver view
+- `backend/api/tools/`: integrations (`auth`, `billing`, `database`, `email`, `storage`)
+- `backend/api/tests/`: tests by concern (`test_auth.py`, `test_webhooks.py`, `test_project_api.py`, `test_commerce_api.py`)
+
+Frontend:
+
+- `frontend/src/lib/api.ts`: API wrappers for all server interaction
+- `frontend/src/features/app-shell/types.ts`: shared payload types
+- `frontend/src/features/app-shell/ui-utils.ts`: shared UI helpers
+- `frontend/src/app.tsx`: page composition and integration wiring
+
 ## Non Negotiables
 
 1. Never bypass payment verification in production.
@@ -202,6 +220,19 @@ UI should be utility-first Tailwind in component code.
 - Avoid adding custom stylesheet systems that require end users to hand-write CSS.
 - Keep layouts mobile-friendly and conversion-focused.
 
+## Skill Authoring Rules
+
+When building project-specific skills for agents:
+
+1. Keep trigger descriptions narrow and explicit.
+2. Define output contracts with pass or fail criteria.
+3. Keep `SKILL.md` concise and move long references to separate files.
+4. Include validation commands at the end of each skill.
+5. Enforce repo non-negotiables (payment truth, schema ownership, production-safe flags).
+
+Reference playbook: `docs/07-agent-skills-playbook.md`
+Starter skill templates: `agent-skills/README.md`
+
 ## Optional Django Extensions (Recommended)
 
 These are optional hardening upgrades and should be introduced deliberately:
@@ -277,3 +308,5 @@ Start here:
 - `docs/03-api-cheatsheet.md`
 - `docs/04-troubleshooting.md`
 - `docs/05-customize-template.md`
+- `docs/06-resend-transactional-email.md`
+- `docs/07-agent-skills-playbook.md`

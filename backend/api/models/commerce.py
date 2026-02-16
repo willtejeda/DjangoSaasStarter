@@ -6,303 +6,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
-from django.utils.text import slugify
-
-
-class Profile(models.Model):
-    class PlanTier(models.TextChoices):
-        FREE = "free", "Free"
-        PRO = "pro", "Pro"
-        ENTERPRISE = "enterprise", "Enterprise"
-
-    clerk_user_id = models.CharField(max_length=64, unique=True, db_index=True)
-    email = models.EmailField(blank=True)
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
-    image_url = models.URLField(blank=True)
-    plan_tier = models.CharField(
-        max_length=24,
-        choices=PlanTier.choices,
-        default=PlanTier.FREE,
-    )
-    billing_features = models.JSONField(default=list, blank=True)
-    is_active = models.BooleanField(default=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("-updated_at",)
-        indexes = [
-            models.Index(fields=("plan_tier", "is_active"), name="profile_plan_active_idx"),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                check=Q(plan_tier__in=("free", "pro", "enterprise")),
-                name="profile_plan_tier_valid",
-            ),
-        ]
-
-    @property
-    def display_name(self) -> str:
-        full_name = f"{self.first_name} {self.last_name}".strip()
-        return full_name or self.email or self.clerk_user_id
-
-    def __str__(self) -> str:
-        return self.email or self.clerk_user_id
-
-
-class Project(models.Model):
-    class Status(models.TextChoices):
-        IDEA = "idea", "Idea"
-        BUILDING = "building", "Building"
-        LIVE = "live", "Live"
-        PAUSED = "paused", "Paused"
-
-    owner = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="projects")
-    name = models.CharField(max_length=160)
-    slug = models.SlugField(max_length=180)
-    summary = models.TextField(blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.IDEA,
-    )
-    monthly_recurring_revenue = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-    )
-    target_launch_date = models.DateField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("-updated_at",)
-        indexes = [
-            models.Index(fields=("owner", "status"), name="project_owner_status_idx"),
-            models.Index(fields=("owner", "updated_at"), name="project_owner_updated_idx"),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=("owner", "slug"),
-                name="project_owner_slug_unique",
-            ),
-            models.CheckConstraint(
-                check=Q(monthly_recurring_revenue__gte=0),
-                name="project_mrr_non_negative",
-            ),
-            models.CheckConstraint(
-                check=~Q(name=""),
-                name="project_name_not_empty",
-            ),
-            models.CheckConstraint(
-                check=~Q(slug=""),
-                name="project_slug_not_empty",
-            ),
-        ]
-
-    def clean(self) -> None:
-        self.name = (self.name or "").strip()
-        if not self.name:
-            raise ValidationError({"name": "Project name cannot be empty."})
-
-        self.slug = slugify((self.slug or "").strip() or self.name)
-        if not self.slug:
-            raise ValidationError({"slug": "Slug is required."})
-
-        self.summary = (self.summary or "").strip()
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.owner.clerk_user_id})"
-
-
-class CustomerAccount(models.Model):
-    profile = models.OneToOneField(
-        Profile,
-        on_delete=models.CASCADE,
-        related_name="customer_account",
-    )
-    external_customer_id = models.CharField(max_length=128, blank=True, db_index=True)
-    billing_email = models.EmailField(blank=True)
-    full_name = models.CharField(max_length=180, blank=True)
-    company_name = models.CharField(max_length=180, blank=True)
-    country = models.CharField(max_length=2, blank=True)
-    tax_id = models.CharField(max_length=64, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("-updated_at",)
-
-    def clean(self) -> None:
-        self.external_customer_id = (self.external_customer_id or "").strip()
-        self.billing_email = (self.billing_email or "").strip()
-        self.full_name = (self.full_name or "").strip()
-        self.company_name = (self.company_name or "").strip()
-        self.country = (self.country or "").strip().upper()
-        self.tax_id = (self.tax_id or "").strip()
-
-        if self.country and len(self.country) != 2:
-            raise ValidationError({"country": "Use a 2-letter ISO country code."})
-
-    def save(self, *args, **kwargs):
-        if not self.external_customer_id:
-            self.external_customer_id = self.profile.clerk_user_id
-        if not self.billing_email:
-            self.billing_email = self.profile.email
-        if not self.full_name:
-            self.full_name = self.profile.display_name
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return self.full_name or self.billing_email or self.external_customer_id
-
-
-class Product(models.Model):
-    class ProductType(models.TextChoices):
-        DIGITAL = "digital", "Digital"
-        SERVICE = "service", "Service"
-
-    class Visibility(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        PUBLISHED = "published", "Published"
-        ARCHIVED = "archived", "Archived"
-
-    owner = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="owned_products")
-    name = models.CharField(max_length=180)
-    slug = models.SlugField(max_length=200)
-    tagline = models.CharField(max_length=240, blank=True)
-    description = models.TextField(blank=True)
-    product_type = models.CharField(
-        max_length=24,
-        choices=ProductType.choices,
-        default=ProductType.DIGITAL,
-    )
-    visibility = models.CharField(
-        max_length=24,
-        choices=Visibility.choices,
-        default=Visibility.DRAFT,
-    )
-    feature_keys = models.JSONField(default=list, blank=True)
-    active_price = models.ForeignKey(
-        "Price",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="active_for_products",
-    )
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("-updated_at",)
-        indexes = [
-            models.Index(fields=("owner", "visibility"), name="product_owner_visibility_idx"),
-            models.Index(fields=("product_type", "visibility"), name="product_type_visibility_idx"),
-        ]
-        constraints = [
-            models.UniqueConstraint(fields=("owner", "slug"), name="product_owner_slug_unique"),
-            models.CheckConstraint(check=~Q(name=""), name="product_name_not_empty"),
-            models.CheckConstraint(check=~Q(slug=""), name="product_slug_not_empty"),
-        ]
-
-    def clean(self) -> None:
-        self.name = (self.name or "").strip()
-        self.slug = slugify((self.slug or "").strip() or self.name)
-        self.tagline = (self.tagline or "").strip()
-        self.description = (self.description or "").strip()
-
-        raw_features = self.feature_keys if isinstance(self.feature_keys, list) else []
-        features: list[str] = []
-        seen: set[str] = set()
-        for feature in raw_features:
-            normalized = str(feature or "").strip().lower().replace(" ", "_")
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            features.append(normalized)
-        self.feature_keys = features
-
-        if not self.name:
-            raise ValidationError({"name": "Product name cannot be empty."})
-        if not self.slug:
-            raise ValidationError({"slug": "Slug is required."})
-        if self.active_price and self.pk and self.active_price.product_id != self.pk:
-            raise ValidationError({"active_price": "Active price must belong to this product."})
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class Price(models.Model):
-    class BillingPeriod(models.TextChoices):
-        ONE_TIME = "one_time", "One-time"
-        MONTHLY = "monthly", "Monthly"
-        YEARLY = "yearly", "Yearly"
-
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="prices")
-    name = models.CharField(max_length=120, blank=True)
-    amount_cents = models.PositiveIntegerField(default=0)
-    currency = models.CharField(max_length=3, default="USD")
-    billing_period = models.CharField(
-        max_length=20,
-        choices=BillingPeriod.choices,
-        default=BillingPeriod.ONE_TIME,
-    )
-    clerk_plan_id = models.CharField(max_length=128, blank=True, db_index=True)
-    clerk_price_id = models.CharField(max_length=128, blank=True, db_index=True)
-    is_active = models.BooleanField(default=True)
-    is_default = models.BooleanField(default=False)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("amount_cents", "created_at")
-        indexes = [
-            models.Index(fields=("product", "is_active"), name="price_product_active_idx"),
-            models.Index(fields=("billing_period", "is_active"), name="price_period_active_idx"),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=("product",),
-                condition=Q(is_default=True),
-                name="price_one_default_per_product",
-            ),
-        ]
-
-    def clean(self) -> None:
-        self.name = (self.name or "").strip()
-        self.currency = (self.currency or "USD").strip().upper()
-        self.clerk_plan_id = (self.clerk_plan_id or "").strip()
-        self.clerk_price_id = (self.clerk_price_id or "").strip()
-
-        if not self.currency or len(self.currency) != 3:
-            raise ValidationError({"currency": "Currency must be a 3-letter code."})
-        if self.is_default and not self.is_active:
-            raise ValidationError({"is_default": "Default price must be active."})
-        if self.amount_cents < 0:
-            raise ValidationError({"amount_cents": "Amount cannot be negative."})
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        period = self.get_billing_period_display()
-        return f"{self.product.name} {period} {self.amount_cents / 100:.2f} {self.currency}"
 
 
 class Order(models.Model):
@@ -316,7 +19,7 @@ class Order(models.Model):
 
     public_id = models.UUIDField(default=uuid4, editable=False, unique=True, db_index=True)
     customer_account = models.ForeignKey(
-        CustomerAccount,
+        "CustomerAccount",
         on_delete=models.CASCADE,
         related_name="orders",
     )
@@ -368,10 +71,10 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
-    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="order_items")
+    order = models.ForeignKey("Order", on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey("Product", on_delete=models.PROTECT, related_name="order_items")
     price = models.ForeignKey(
-        Price,
+        "Price",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -424,19 +127,19 @@ class Subscription(models.Model):
         PAUSED = "paused", "Paused"
 
     customer_account = models.ForeignKey(
-        CustomerAccount,
+        "CustomerAccount",
         on_delete=models.CASCADE,
         related_name="subscriptions",
     )
     product = models.ForeignKey(
-        Product,
+        "Product",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="subscriptions",
     )
     price = models.ForeignKey(
-        Price,
+        "Price",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -494,14 +197,14 @@ class PaymentTransaction(models.Model):
         CANCELED = "canceled", "Canceled"
 
     order = models.ForeignKey(
-        Order,
+        "Order",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="transactions",
     )
     subscription = models.ForeignKey(
-        Subscription,
+        "Subscription",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -598,7 +301,7 @@ class Entitlement(models.Model):
         MANUAL = "manual", "Manual"
 
     customer_account = models.ForeignKey(
-        CustomerAccount,
+        "CustomerAccount",
         on_delete=models.CASCADE,
         related_name="entitlements",
     )
@@ -654,59 +357,19 @@ class Entitlement(models.Model):
         return f"{self.customer_account_id}:{self.feature_key}"
 
 
-class DigitalAsset(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="assets")
-    title = models.CharField(max_length=180)
-    file_path = models.CharField(max_length=420)
-    file_size_bytes = models.PositiveBigIntegerField(default=0)
-    checksum_sha256 = models.CharField(max_length=64, blank=True)
-    version_label = models.CharField(max_length=40, blank=True)
-    is_active = models.BooleanField(default=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("title", "id")
-        indexes = [
-            models.Index(fields=("product", "is_active"), name="asset_product_active_idx"),
-        ]
-        constraints = [
-            models.UniqueConstraint(fields=("product", "file_path"), name="asset_product_path_unique"),
-        ]
-
-    def clean(self) -> None:
-        self.title = (self.title or "").strip()
-        self.file_path = (self.file_path or "").strip()
-        self.checksum_sha256 = (self.checksum_sha256 or "").strip().lower()
-        self.version_label = (self.version_label or "").strip()
-
-        if not self.title:
-            raise ValidationError({"title": "Asset title is required."})
-        if not self.file_path:
-            raise ValidationError({"file_path": "Asset path is required."})
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"{self.product.name}: {self.title}"
-
-
 class DownloadGrant(models.Model):
     token = models.UUIDField(default=uuid4, editable=False, unique=True, db_index=True)
     customer_account = models.ForeignKey(
-        CustomerAccount,
+        "CustomerAccount",
         on_delete=models.CASCADE,
         related_name="download_grants",
     )
     order_item = models.ForeignKey(
-        OrderItem,
+        "OrderItem",
         on_delete=models.CASCADE,
         related_name="download_grants",
     )
-    asset = models.ForeignKey(DigitalAsset, on_delete=models.CASCADE, related_name="download_grants")
+    asset = models.ForeignKey("DigitalAsset", on_delete=models.CASCADE, related_name="download_grants")
     expires_at = models.DateTimeField(blank=True, null=True)
     max_downloads = models.PositiveIntegerField(default=5)
     download_count = models.PositiveIntegerField(default=0)
@@ -750,32 +413,6 @@ class DownloadGrant(models.Model):
         return str(self.token)
 
 
-class ServiceOffer(models.Model):
-    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="service_offer")
-    session_minutes = models.PositiveIntegerField(default=60)
-    delivery_days = models.PositiveIntegerField(default=7)
-    revision_count = models.PositiveIntegerField(default=0)
-    onboarding_instructions = models.TextField(blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("-updated_at",)
-
-    def clean(self) -> None:
-        if self.product and self.product.product_type != Product.ProductType.SERVICE:
-            raise ValidationError({"product": "ServiceOffer requires a service product."})
-        self.onboarding_instructions = (self.onboarding_instructions or "").strip()
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"ServiceOffer({self.product.name})"
-
-
 class Booking(models.Model):
     class Status(models.TextChoices):
         REQUESTED = "requested", "Requested"
@@ -784,17 +421,17 @@ class Booking(models.Model):
         CANCELED = "canceled", "Canceled"
 
     customer_account = models.ForeignKey(
-        CustomerAccount,
+        "CustomerAccount",
         on_delete=models.CASCADE,
         related_name="bookings",
     )
     service_offer = models.ForeignKey(
-        ServiceOffer,
+        "ServiceOffer",
         on_delete=models.CASCADE,
         related_name="bookings",
     )
     order_item = models.ForeignKey(
-        OrderItem,
+        "OrderItem",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

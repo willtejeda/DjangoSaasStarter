@@ -20,7 +20,7 @@ Django REST API backend, React frontend, Clerk for auth/billing, Supabase as Pos
 
 Two overlapping data layers exist:
 
-1. **Django ORM** - wants to own the schema via `models.py` + `makemigrations` + `migrate`
+1. **Django ORM** - wants to own the schema via `backend/api/models/` + `makemigrations` + `migrate`
 2. **Supabase** - also wants to own the schema via its dashboard/migrations, and provides its own PostgREST API, auth, and RLS
 
 ### Resolution
@@ -67,7 +67,7 @@ A practical default for cost and control:
 ## Implementation Notes
 
 ### Django ↔ Supabase
-- `models.py` defines schema, Django runs migrations against Supabase Postgres
+- `backend/api/models/` defines schema, Django runs migrations against Supabase Postgres
 - Supabase Python client used for RLS-scoped queries only
 - Service-role key available for server-side operations that bypass RLS
 

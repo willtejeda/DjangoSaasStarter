@@ -10,7 +10,7 @@ Resend sends are triggered from backend workflows:
 - Booking request confirmation email
 - Preflight test email endpoint: `POST /api/account/preflight/email-test/`
 
-Code path: `backend/api/emails.py`
+Code path: `backend/api/tools/email/resend.py`
 
 ## 2. Required and recommended env vars
 
@@ -114,7 +114,7 @@ Email clients do not run Tailwind runtime CSS. Use this pattern:
 2. Define corresponding CSS in a `<style>` block.
 3. Inline styles before send using `premailer`.
 
-The backend includes this helper flow in `backend/api/emails.py`:
+The backend includes this helper flow in `backend/api/tools/email/resend.py`:
 
 - `_inline_email_html()` uses `premailer.transform(...)`
 - Falls back to raw HTML if inlining fails

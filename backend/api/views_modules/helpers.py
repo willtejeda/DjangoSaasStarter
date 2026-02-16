@@ -5,7 +5,7 @@ from typing import Any
 from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
-from ..billing import (
+from ..tools.billing import (
     extract_billing_features as extract_billing_features_from_claims,
     infer_plan_tier as infer_plan_tier_from_features,
 )

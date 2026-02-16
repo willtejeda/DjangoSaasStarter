@@ -156,7 +156,9 @@ if DEBUG and not CORS_ALLOWED_ORIGINS:
 CSRF_TRUSTED_ORIGINS = get_csv("CSRF_TRUSTED_ORIGINS")
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ("api.authentication.ClerkJWTAuthentication",),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "api.tools.auth.authentication.ClerkJWTAuthentication",
+    ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",

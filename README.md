@@ -12,7 +12,8 @@ Read these docs in order:
 4. `docs/04-troubleshooting.md`
 5. `docs/05-customize-template.md`
 6. `docs/06-resend-transactional-email.md`
-7. `docs/StackAnalysis.md`
+7. `docs/07-agent-skills-playbook.md`
+8. `docs/StackAnalysis.md`
 
 ## Why This Stack
 
@@ -119,6 +120,41 @@ Code organization references:
 - Backend API module map: `backend/api/README.md`
 - Backend tools map: `backend/api/tools/README.md`
 - Frontend module map: `frontend/src/README.md`
+- Agent skill templates: `agent-skills/README.md`
+
+Backend API package map:
+
+```text
+backend/api/
+  models/
+    accounts.py
+    catalog.py
+    commerce.py
+  serializers/
+    common.py
+    catalog.py
+    commerce.py
+  views_modules/
+    common.py
+    account.py
+    seller.py
+  webhooks/
+    verification.py
+    helpers.py
+    handlers.py
+    receiver.py
+  tests/
+    test_auth.py
+    test_webhooks.py
+    test_project_api.py
+    test_commerce_api.py
+  tools/
+    auth/
+    billing/
+    database/
+    email/
+    storage/
+```
 
 ## Quick Start
 
@@ -402,7 +438,7 @@ Webhook handlers try multiple fields, but `order_public_id` is the most reliable
 
 ## Commerce Model Map
 
-Implemented models in `backend/api/models.py`:
+Implemented models in `backend/api/models/`:
 
 - `Profile`
 - `CustomerAccount`
@@ -543,6 +579,13 @@ If you want stronger production posture, these are common next adds:
 Keep these optional so the starter remains lightweight and modular.
 
 ## Test Commands
+
+Test files are grouped by concern under `backend/api/tests/`:
+
+- `test_auth.py`
+- `test_webhooks.py`
+- `test_project_api.py`
+- `test_commerce_api.py`
 
 From `backend/`:
 

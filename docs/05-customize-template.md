@@ -26,6 +26,8 @@ Example:
 
 Start in `frontend/src/app.tsx`.
 
+Use integration snippets in `frontend/src/README.md` for pricing fetches, order creation, subscription reads, and usage payload wiring.
+
 Update at minimum:
 
 - Hero headline and subheadline

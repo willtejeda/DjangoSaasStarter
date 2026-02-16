@@ -1,8 +1,8 @@
-# DjangoStarter Docs
+# DjangoStarter Docs Wiki
 
-Use this folder as the operator manual for shipping a paid MVP from this template.
+Use this folder as the project wiki for operators, product builders, and coding agents.
 
-Read these docs in order:
+## Read in order
 
 1. `01-quickstart.md`
 2. `02-first-revenue-loop.md`
@@ -10,40 +10,33 @@ Read these docs in order:
 4. `04-troubleshooting.md`
 5. `05-customize-template.md`
 6. `06-resend-transactional-email.md`
-7. `StackAnalysis.md` for architecture context and tradeoffs
+7. `07-agent-skills-playbook.md`
+8. `StackAnalysis.md`
 
-## What this covers
-
-- Local backend and frontend setup
-- Product, pricing, checkout, and fulfillment flow
-- Transactional email setup with Resend
-- AI-first subscription usage scaffolding
-- API endpoints for buyer and seller operations
-- Common failure modes and fast fixes
-- A repeatable sequence for converting the template into your SaaS
-
-## Why this starter exists
-
-It solves the same two questions most users ask:
-
-- Why do I need this?
-Answer: because auth, billing, and fulfillment are where MVPs break under real customers.
-- What problem does this solve?
-Answer: it gives you a production-minded base where payments, delivery, account UX, and usage surfaces already work together.
-
-## Fast links
+## Quick links
 
 - Root guide: `README.md`
 - Agent contract: `AGENTS.md`
+- Backend API map: `backend/api/README.md`
+- Backend tools map: `backend/api/tools/README.md`
+- Frontend map and examples: `frontend/src/README.md`
 - Backend env reference: `backend/.env.example`
 - Frontend env reference: `frontend/.env.example`
-- Resend code path: `backend/api/emails.py`
-- Deployment checks: `.github/workflows/ci.yml`
 
-## Non negotiable production rules
+## Operating principles
 
-- Keep `DJANGO_DEBUG=False`
-- Keep `ORDER_CONFIRM_ALLOW_MANUAL=False`
-- Keep `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False`
-- Confirm payments from verified Clerk webhooks only
-- Keep Django as schema owner for all Django-managed tables
+- Django is the schema owner.
+- Clerk webhooks are the payment truth in production.
+- Resend is best-effort transactional delivery.
+- Keep modules deletable and composable so this stays a real starter.
+
+## Quality gates before shipping
+
+```bash
+cd backend
+DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
+DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
+
+cd ../frontend
+npm run build
+```

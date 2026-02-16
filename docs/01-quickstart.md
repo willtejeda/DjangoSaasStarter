@@ -85,7 +85,7 @@ Django owns schema. Supabase is the Postgres host and operations surface.
 
 Required behavior:
 
-- Change schema via Django `models.py` and migrations.
+- Change schema via Django `backend/api/models/` modules and migrations.
 - Run `python3 manage.py makemigrations` and `python3 manage.py migrate`.
 
 Avoid editing Django-managed tables directly in Supabase dashboard.

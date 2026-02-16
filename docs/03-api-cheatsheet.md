@@ -343,7 +343,7 @@ POST /api/webhooks/clerk/
 
 Production rule: do not fake webhook confirmations. Use Clerk webhook delivery with valid `CLERK_WEBHOOK_SIGNING_SECRET`.
 
-## 8. Resend transactional email behavior
+## 9. Resend transactional email behavior
 
 Email sends are triggered by backend workflows, not direct email endpoints:
 
@@ -367,3 +367,43 @@ Optional but recommended:
 - `RESEND_REPLY_TO_EMAIL`
 
 Important: delivery is best-effort and does not block checkout or booking creation.
+
+## 10. Frontend integration snippets (React + Clerk)
+
+Use these patterns from `frontend/src/lib/api.ts`:
+
+```ts
+import { apiRequest, authedRequest } from './lib/api';
+```
+
+Public pricing catalog:
+
+```ts
+const products = await apiRequest<Array<{
+  id: number;
+  slug: string;
+  name: string;
+  active_price?: { amount_cents: number; currency: string } | null;
+}>>('/products/');
+```
+
+Create order for selected price:
+
+```ts
+const orderPayload = await authedRequest<{
+  order: { public_id: string };
+  checkout?: { checkout_url?: string | null };
+}>(getToken, '/account/orders/create/', {
+  method: 'POST',
+  body: { price_id: selectedPriceId, quantity: 1 },
+});
+```
+
+Load subscriptions and usage:
+
+```ts
+const [subs, usage] = await Promise.all([
+  authedRequest(getToken, '/account/subscriptions/'),
+  authedRequest(getToken, '/ai/usage/summary/'),
+]);
+```
