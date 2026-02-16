@@ -106,10 +106,10 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
       </div>
       <nav className="site-nav" aria-label="Primary">
         <NavLink to={signedIn ? '/app' : '/'} currentPath={pathname} onNavigate={onNavigate}>Home</NavLink>
-        <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Products</NavLink>
-        <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink>
         {signedIn ? (
           <>
+            <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Products</NavLink>
+            <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink>
             <NavLink to="/account/purchases" currentPath={pathname} onNavigate={onNavigate}>Purchases</NavLink>
             <NavLink to="/account/downloads" currentPath={pathname} onNavigate={onNavigate}>Downloads</NavLink>
             <NavLink to="/account/subscriptions" currentPath={pathname} onNavigate={onNavigate}>Subscriptions</NavLink>
@@ -137,40 +137,103 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
   );
 }
 
-function MarketingHome({ onNavigate }) {
+function MarketingHome() {
+  const jumpToSection = (sectionId) => {
+    const section = window.document.getElementById(sectionId);
+    if (!section) {
+      return;
+    }
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const launchSteps = [
     {
-      title: 'Boot the stack',
-      body: 'Run backend and frontend locally and verify /api/health responds.'
+      title: 'Run the stack locally',
+      body: 'Boot backend and frontend, then verify /api/health before touching product logic.'
     },
     {
-      title: 'Publish one offer',
-      body: 'Create one product and one default price using seller endpoints.'
+      title: 'Set auth and billing env keys',
+      body: 'Add Clerk publishable and secret keys so login and checkout surfaces are wired from day one.'
     },
     {
-      title: 'Validate purchase flow',
-      body: 'Create an order and confirm fulfillment path using webhook-safe defaults.'
+      title: 'Configure one paid offer',
+      body: 'Create one product and one default active price, then attach entitlement feature keys.'
     },
     {
-      title: 'Ship custom SaaS',
-      body: 'Replace copy, tune pricing, and keep payment confirmation server-side.'
+      title: 'Validate payment truth',
+      body: 'Confirm pending orders are only fulfilled after verified Clerk webhook events.'
+    },
+    {
+      title: 'Ship your custom SaaS',
+      body: 'Replace marketing and account UX fast while keeping payment and fulfillment guardrails.'
     }
   ];
 
-  const pathCards = [
+  const whoForCards = [
     {
-      title: 'I want to evaluate fast',
-      body: 'Use the built-in product and pricing pages to see the full buyer journey quickly.',
-      points: ['Public catalog', 'Checkout path', 'Customer account pages'],
-      cta: 'Open Product Flow',
-      path: '/products'
+      title: 'Solo founders',
+      body: 'You need first revenue in weeks, not a three month rebuild of auth and billing.',
+      points: ['Launch one paid offer', 'Validate willingness to pay', 'Iterate from real buyer signals']
     },
     {
-      title: 'I want to launch my SaaS',
-      body: 'Start with billing and plan structure, then map entitlements and fulfillment to your offer.',
-      points: ['Clerk billing integration', 'Entitlement mapping', 'Webhook-driven fulfillment'],
-      cta: 'Open Pricing Flow',
-      path: '/pricing'
+      title: 'Product engineers',
+      body: 'You want to skip platform plumbing and focus on solving the core customer problem.',
+      points: ['Django + DRF foundation', 'Preact frontend shell', 'Account lifecycle routes included']
+    },
+    {
+      title: 'Agencies and freelancers',
+      body: 'You need a repeatable base to ship monetized client MVPs with fewer production mistakes.',
+      points: ['Reusable checkout flow', 'Download and booking fulfillment', 'Deploy checks and safe defaults']
+    },
+    {
+      title: 'Vibe coders with standards',
+      body: 'You move fast with AI, but still need production grade guardrails around money and access.',
+      points: ['Webhook verified payment state', 'No hardcoded pricing assumptions', 'Entitlement-first design']
+    }
+  ];
+
+  const setupTracks = [
+    {
+      title: '1. Quickstart in under an hour',
+      body: 'Use the same setup flow documented in this repository.',
+      points: ['backend: venv, install, migrate, runserver', 'frontend: npm install, npm run dev', 'verify: frontend loads and /api/health responds']
+    },
+    {
+      title: '2. First revenue loop',
+      body: 'Configure a single real offer before adding complexity.',
+      points: ['create product and default price', 'set Clerk billing plan mapping', 'test order create and webhook fulfillment']
+    },
+    {
+      title: '3. Customize and deploy',
+      body: 'Swap your offer and message while keeping payment truth server side.',
+      points: ['edit landing in app.jsx first', 'set production env and webhook secret', 'run tests, deploy check, frontend build']
+    }
+  ];
+
+  const workflowCards = [
+    {
+      title: 'Define the paid outcome',
+      body: 'Pick one ideal customer and one painful problem with clear willingness to pay.'
+    },
+    {
+      title: 'Customize marketing first',
+      body: 'Rewrite homepage headline, promise, CTA, and offer copy before deep backend edits.'
+    },
+    {
+      title: 'Model catalog and pricing',
+      body: 'Create products and prices from APIs and keep one default active price per offer.'
+    },
+    {
+      title: 'Keep payment truth server-side',
+      body: 'Orders start pending and fulfill only after verified Clerk webhook events.'
+    },
+    {
+      title: 'Validate account UX',
+      body: 'Check purchases, subscriptions, downloads, and bookings pages with real data states.'
+    },
+    {
+      title: 'Ship with quality gates',
+      body: 'Run backend tests, deploy checks, and frontend build before every deploy.'
     }
   ];
 
@@ -194,30 +257,31 @@ function MarketingHome({ onNavigate }) {
       <header className="panel landing-hero">
         <div className="landing-grid">
           <div className="landing-copy">
-            <div className="landing-chip">DjangoStarter: SaaS Revenue Foundation</div>
-            <h1>Build a custom SaaS on top of a payment-ready starter, not a blank project.</h1>
+            <div className="landing-chip">Tailwind for SaaS apps</div>
+            <h1>DjangoStarter is the revenue-ready base for shipping SaaS with vibe coding speed.</h1>
             <p className="landing-subtitle">
-              This starter includes the full paid loop from day one: catalog, pricing, checkout,
-              webhook-verified fulfillment, subscriptions, and customer account lifecycle pages.
+              Skip blank-project chaos. You get Django + DRF backend, Preact frontend, Clerk auth and billing,
+              webhook-verified fulfillment, and account lifecycle pages already wired.
             </p>
             <div className="landing-actions">
-              <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Start with Product Flow
-              </button>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-                Start with Pricing Flow
+              <SignUpButton mode="modal">
+                <button type="button" className="button button-primary">Start Free and Build</button>
+              </SignUpButton>
+              <button type="button" className="button button-secondary" onClick={() => jumpToSection('getting-started')}>
+                See Getting Started
               </button>
             </div>
             <div className="landing-proof">
+              <span>Django + DRF + Preact base</span>
+              <span>Clerk auth + billing integration</span>
               <span>Webhook-first payment confirmation</span>
-              <span>Digital and service monetization</span>
-              <span>Seller and customer operations included</span>
+              <span>Digital and service fulfillment included</span>
             </div>
           </div>
 
           <aside className="landing-quickstart">
-            <p className="eyebrow">First 60 Minutes</p>
-            <h3>Use this order and skip chaos</h3>
+            <p className="eyebrow">First 90 Minutes</p>
+            <h3>Use this sequence and avoid thrash</h3>
             <ol className="landing-step-list">
               {launchSteps.map((step, index) => (
                 <li className="landing-step" key={step.title}>
@@ -230,18 +294,18 @@ function MarketingHome({ onNavigate }) {
               ))}
             </ol>
             <div className="landing-inline-cta">
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>
-                Run the Flow
+              <button type="button" className="button button-secondary" onClick={() => jumpToSection('usage-playbook')}>
+                Open the Playbook
               </button>
             </div>
           </aside>
         </div>
       </header>
 
-      <section className="panel">
-        <h2>Pick your starting path</h2>
+      <section className="panel" id="who-for">
+        <h2>Who this starter is for</h2>
         <div className="landing-path-grid">
-          {pathCards.map((card) => (
+          {whoForCards.map((card) => (
             <article className="landing-path-card" key={card.title}>
               <h3>{card.title}</h3>
               <p>{card.body}</p>
@@ -250,16 +314,42 @@ function MarketingHome({ onNavigate }) {
                   <li key={point}>{point}</li>
                 ))}
               </ul>
-              <button type="button" className="button button-primary" onClick={() => onNavigate(card.path)}>
-                {card.cta}
-              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel" id="getting-started">
+        <h2>How to get started fast</h2>
+        <div className="landing-capability-grid">
+          {setupTracks.map((track) => (
+            <article className="landing-capability-card" key={track.title}>
+              <h3>{track.title}</h3>
+              <p>{track.body}</p>
+              <ul className="check-grid">
+                {track.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel" id="usage-playbook">
+        <h2>How to use this template like a SaaS framework</h2>
+        <div className="landing-capability-grid">
+          {workflowCards.map((card) => (
+            <article className="landing-capability-card" key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
             </article>
           ))}
         </div>
       </section>
 
       <section className="panel">
-        <h2>What ships out of the box</h2>
+        <h2>What is already implemented</h2>
         <div className="landing-capability-grid">
           {capabilityGroups.map((group) => (
             <article className="landing-capability-card" key={group.title}>
@@ -276,24 +366,24 @@ function MarketingHome({ onNavigate }) {
 
       <section className="panel landing-final">
         <div>
-          <p className="eyebrow">Fast Path</p>
-          <h2>Focus on offer and distribution. Keep checkout, fulfillment, and account ops already handled.</h2>
+          <p className="eyebrow">Template Promise</p>
+          <h2>Treat DjangoStarter like Tailwind for SaaS apps: compose fast, keep hard payment rules in place.</h2>
           <p className="helper-text">
-            This template is built to remove plumbing work so your team can validate paid demand faster.
+            Focus on offer, distribution, and customer outcome. Keep checkout, fulfillment, and account operations stable.
           </p>
         </div>
         <div className="landing-final-actions">
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-            Open Product Experience
-          </button>
-          <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-            Open Pricing + Billing
-          </button>
+          <SignUpButton mode="modal">
+            <button type="button" className="button button-primary">Start Free</button>
+          </SignUpButton>
+          <SignInButton mode="modal">
+            <button type="button" className="button button-secondary">Sign In and Continue</button>
+          </SignInButton>
         </div>
         <ul className="check-grid">
-          <li>Start with one paid offer</li>
-          <li>Measure conversion before expanding scope</li>
-          <li>Use webhook verification for production payment truth</li>
+          <li>Keep pricing configuration server-driven, not hardcoded</li>
+          <li>Use verified webhooks as production payment truth</li>
+          <li>Run tests and build before every deploy</li>
         </ul>
       </section>
     </>
@@ -1125,22 +1215,27 @@ function AccountDashboard({ onNavigate }) {
 }
 
 function SignedOutApp({ pathname, onNavigate, theme, onToggleTheme }) {
-  const isProductDetail = pathname.startsWith('/products/');
-  const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
-
-  let content = <MarketingHome onNavigate={onNavigate} />;
-  if (pathname === '/pricing') {
-    content = <PricingPage signedIn={false} />;
-  } else if (pathname === '/products') {
-    content = <ProductCatalog onNavigate={onNavigate} />;
-  } else if (isProductDetail && productSlug) {
-    content = <ProductDetail slug={productSlug} signedIn={false} onNavigate={onNavigate} getToken={null} />;
-  }
+  const hiddenCatalogPath = pathname === '/pricing' || pathname === '/products' || pathname.startsWith('/products/');
+  const normalizedPath = hiddenCatalogPath ? '/' : pathname;
+  const content = hiddenCatalogPath ? (
+    <>
+      <section className="panel warning-panel">
+        <h1>Catalog and pricing are disabled in template preview mode</h1>
+        <p>
+          This starter ships without default products or plans. Sign in to configure your own offers, then use
+          the account routes to validate checkout and fulfillment.
+        </p>
+      </section>
+      <MarketingHome />
+    </>
+  ) : (
+    <MarketingHome />
+  );
 
   return (
     <main className="shell">
       <Header
-        pathname={pathname}
+        pathname={normalizedPath}
         onNavigate={onNavigate}
         signedIn={false}
         theme={theme}
