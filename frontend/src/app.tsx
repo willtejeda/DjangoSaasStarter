@@ -42,6 +42,7 @@ import {
   type ProductRecord,
   type SignedAppProps,
   type SubscriptionRecord,
+  type SupabaseProbeResponse,
   type TokenNavigateProps,
   type TutorialBlockProps,
 } from './features/app-shell/types';
@@ -1318,14 +1319,20 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
           buckets: [],
           notes: [],
         })),
-        authedRequest<{ profile?: unknown }>(getToken, '/supabase/profile/')
-          .then((payload) => ({
-            checked: true,
-            ok: true,
-            detail: payload?.profile
-              ? 'Supabase profile probe succeeded.'
-              : 'Supabase probe succeeded. No profile row found yet.',
-          }))
+        authedRequest<SupabaseProbeResponse>(getToken, '/supabase/profile/')
+          .then((payload) => {
+            const ok = payload?.ok ?? true;
+            const detailFromApi = typeof payload?.detail === 'string' ? payload.detail.trim() : '';
+            const detail = detailFromApi
+              || (ok
+                ? (payload?.profile ? 'Supabase profile probe succeeded.' : 'Supabase probe succeeded. No profile row found yet.')
+                : 'Supabase probe failed.');
+            return {
+              checked: true,
+              ok,
+              detail,
+            };
+          })
           .catch((probeError) => ({
             checked: true,
             ok: false,

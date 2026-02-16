@@ -145,6 +145,13 @@ export interface AiUsageSummaryResponse {
   notes: string[];
 }
 
+export interface SupabaseProbeResponse {
+  ok?: boolean;
+  detail?: string;
+  error?: string;
+  profile?: unknown;
+}
+
 export interface NavLinkProps {
   to: string;
   currentPath: string;

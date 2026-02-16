@@ -185,7 +185,7 @@ class SupabaseProfileView(APIView):
         claims = get_request_claims(request)
         clerk_user_id = claims.get("sub")
         if not clerk_user_id:
-            return Response({"detail": "Missing Clerk user id in token claims."}, status=400)
+            return Response({"ok": False, "detail": "Missing Clerk user id in token claims."}, status=400)
 
         try:
             supabase = get_supabase_client(access_token=getattr(request, "clerk_token", None))
@@ -197,19 +197,35 @@ class SupabaseProfileView(APIView):
                 .execute()
             )
         except SupabaseConfigurationError as exc:
-            return Response({"detail": str(exc)}, status=500)
+            return Response(
+                {
+                    "ok": False,
+                    "detail": "Supabase probe failed. Check SUPABASE_URL and API keys.",
+                    "error": str(exc),
+                }
+            )
         except Exception as exc:  # pragma: no cover
             return Response(
                 {
-                    "detail": "Supabase query failed. Confirm table and RLS setup.",
+                    "ok": False,
+                    "detail": "Supabase probe failed. Confirm table and RLS setup.",
                     "error": str(exc),
-                },
-                status=502,
+                }
             )
 
         data = getattr(result, "data", None)
         profile = data[0] if isinstance(data, list) and data else data
-        return Response({"profile": profile})
+        return Response(
+            {
+                "ok": True,
+                "detail": (
+                    "Supabase profile probe succeeded."
+                    if profile
+                    else "Supabase probe succeeded. No profile row found yet."
+                ),
+                "profile": profile,
+            }
+        )
 
 
 class ClerkUserView(APIView):

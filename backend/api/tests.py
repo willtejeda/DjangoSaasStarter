@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -426,6 +426,32 @@ class ProjectApiTests(TestCase):
         self.assertEqual(len(response.data["buckets"]), 3)
         self.assertEqual({bucket["key"] for bucket in response.data["buckets"]}, {"tokens", "images", "videos"})
         self.assertIn("notes", response.data)
+
+    def test_supabase_profile_probe_returns_soft_failure_when_unconfigured(self):
+        response = self._request("get", "/api/supabase/profile/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["ok"])
+        self.assertIn("Supabase probe failed", response.data["detail"])
+
+    @override_settings(
+        SUPABASE_URL="https://demo-project.supabase.co",
+        SUPABASE_ANON_KEY="anon-key",
+    )
+    @patch("api.views_modules.common.get_supabase_client")
+    def test_supabase_profile_probe_returns_profile_when_query_succeeds(self, mock_get_supabase_client):
+        result = Mock()
+        result.data = [{"id": 1, "clerk_user_id": "user_123"}]
+        supabase = Mock()
+        supabase.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = result
+        mock_get_supabase_client.return_value = supabase
+
+        response = self._request("get", "/api/supabase/profile/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["ok"])
+        self.assertEqual(response.data["profile"]["clerk_user_id"], "user_123")
+        mock_get_supabase_client.assert_called_once_with(access_token="unit-test-token")
 
     def test_preflight_email_test_requires_resend_config(self):
         response = self._request("post", "/api/account/preflight/email-test/")

@@ -306,6 +306,29 @@ Supabase profile probe:
 curl -H "Authorization: Bearer $TOKEN" "$API/supabase/profile/"
 ```
 
+Success payload:
+
+```json
+{
+  "ok": true,
+  "detail": "Supabase profile probe succeeded.",
+  "profile": {
+    "id": 1,
+    "clerk_user_id": "user_123"
+  }
+}
+```
+
+Soft-failure payload (still HTTP 200 so dashboards can keep loading):
+
+```json
+{
+  "ok": false,
+  "detail": "Supabase probe failed. Check SUPABASE_URL and API keys.",
+  "error": "SUPABASE_URL is not configured."
+}
+```
+
 Clerk webhook receiver:
 
 ```text
