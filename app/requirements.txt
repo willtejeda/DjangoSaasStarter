@@ -1,6 +1,9 @@
-supabase
-clerk-backend-api
-django
-django-rest-framework
+Django
+djangorestframework
 django-cors-headers
 python-decouple
+PyJWT[crypto]
+supabase
+clerk-backend-api
+psycopg[binary]
+svix
