@@ -437,7 +437,7 @@ class ProjectApiTests(TestCase):
         RESEND_API_KEY="re_test_key",
         RESEND_FROM_EMAIL="Acme <updates@example.com>",
     )
-    @patch("api.views.send_preflight_test_email")
+    @patch("api.views_modules.account.send_preflight_test_email")
     def test_preflight_email_test_updates_customer_metadata(self, mock_send_preflight):
         mock_send_preflight.return_value = (True, "owner@example.com")
 
@@ -624,7 +624,7 @@ class CommerceApiTests(TestCase):
         )
         self.assertEqual(DownloadGrant.objects.filter(customer_account=buyer_account).count(), 1)
 
-    @patch("api.views.send_order_fulfilled_email")
+    @patch("api.views_modules.account.send_order_fulfilled_email")
     def test_confirm_order_triggers_order_fulfillment_email(self, mock_send_order_email):
         owner = Profile.objects.create(clerk_user_id="seller_email_1", email="seller-email@example.com")
         product = Product.objects.create(
@@ -661,7 +661,7 @@ class CommerceApiTests(TestCase):
         self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
         mock_send_order_email.assert_called_once()
 
-    @patch("api.views.send_booking_requested_email")
+    @patch("api.views_modules.account.send_booking_requested_email")
     def test_booking_create_triggers_booking_email(self, mock_send_booking_email):
         owner = Profile.objects.create(clerk_user_id="seller_service_1", email="seller-service@example.com")
         service_product = Product.objects.create(
