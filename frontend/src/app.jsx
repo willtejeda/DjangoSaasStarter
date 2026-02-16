@@ -14,6 +14,25 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
+const THEME_STORAGE_KEY = 'django_starter_theme';
+const THEME_DARK = 'dark';
+const THEME_LIGHT = 'light';
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') {
+    return THEME_DARK;
+  }
+
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === THEME_DARK || stored === THEME_LIGHT) {
+    return stored;
+  }
+
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return THEME_DARK;
+  }
+  return THEME_LIGHT;
+}
 
 function formatCurrencyFromCents(cents, currency = 'USD') {
   const numeric = Number(cents || 0) / 100;
@@ -73,10 +92,16 @@ function NavLink({ to, currentPath, onNavigate, children }) {
   );
 }
 
-function Header({ pathname, onNavigate, signedIn }) {
+function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
   return (
     <header className="site-header panel">
-      <div className="site-brand" onClick={() => onNavigate(signedIn ? '/app' : '/')}>DjangoStarter Commerce</div>
+      <div className="site-brand-shell" onClick={() => onNavigate(signedIn ? '/app' : '/')}>
+        <div className="site-brand-mark">DS</div>
+        <div className="site-brand-text">
+          <strong className="site-brand">DjangoStarter</strong>
+          <span className="site-brand-subtitle">Launch stack for AI and creator SaaS</span>
+        </div>
+      </div>
       <nav className="site-nav" aria-label="Primary">
         <NavLink to={signedIn ? '/app' : '/'} currentPath={pathname} onNavigate={onNavigate}>Home</NavLink>
         <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Products</NavLink>
@@ -90,6 +115,9 @@ function Header({ pathname, onNavigate, signedIn }) {
         ) : null}
       </nav>
       <div className="site-actions">
+        <button type="button" className="button button-ghost theme-toggle" onClick={onToggleTheme}>
+          {theme === THEME_DARK ? 'Light Mode' : 'Dark Mode'}
+        </button>
         {signedIn ? (
           <UserButton afterSignOutUrl="/" />
         ) : (
@@ -110,46 +138,120 @@ function Header({ pathname, onNavigate, signedIn }) {
 function MarketingHome({ onNavigate }) {
   return (
     <>
-      <header className="hero">
-        <div className="hero-chip">Django + Supabase + Clerk + Preact</div>
-        <h1>Ship digital product and service revenue in one stack.</h1>
-        <p>
-          Sell files, subscriptions, and service engagements with Clerk billing, Django APIs,
-          and a buyer portal for purchases, downloads, and account lifecycle.
-        </p>
-        <div className="hero-actions">
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-            Browse Products
-          </button>
-          <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-            View Pricing
-          </button>
+      <header className="hero panel">
+        <div className="hero-layout">
+          <div className="hero-copy">
+            <div className="hero-chip">Django + Supabase + Clerk + Preact</div>
+            <h1>Turn ideas into paid AI and digital offers faster.</h1>
+            <p>
+              This starter ships the full revenue stack by default: checkout, subscriptions,
+              fulfillment, entitlements, downloads, and account lifecycle. Build and launch
+              experiments in days, not quarters.
+            </p>
+            <div className="hero-actions">
+              <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+                Browse Products
+              </button>
+              <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
+                View Pricing
+              </button>
+            </div>
+            <div className="hero-proof">
+              <span>Subscription billing</span>
+              <span>Digital delivery</span>
+              <span>Service bookings</span>
+            </div>
+          </div>
+          <aside className="hero-aside">
+            <p className="eyebrow">Launch Blueprint</p>
+            <h3>Go from zero to first revenue loop</h3>
+            <ol className="sequence-list">
+              <li>Create your offer and pricing.</li>
+              <li>Collect payments with Clerk.</li>
+              <li>Deliver assets or services automatically.</li>
+              <li>Retain with entitlements and recurring plans.</li>
+            </ol>
+          </aside>
         </div>
       </header>
 
-      <section className="panel grid-three">
+      <section className="panel stats-strip">
         <article>
-          <h3>Commerce data model</h3>
-          <p>Products, prices, orders, subscriptions, entitlements, and delivery grants are modeled in Django ORM.</p>
+          <p className="metric-label">Revenue Surfaces</p>
+          <h3>3</h3>
+          <p className="helper-text">One-time, subscription, and service delivery in one codebase.</p>
         </article>
         <article>
-          <h3>Billing through Clerk</h3>
-          <p>Use Pricing Table and Clerk subscriptions while syncing local billing state through webhooks.</p>
+          <p className="metric-label">Core APIs</p>
+          <h3>20+</h3>
+          <p className="helper-text">Catalog, checkout, downloads, bookings, and seller tooling.</p>
         </article>
         <article>
-          <h3>Customer delivery UX</h3>
-          <p>Buyers get purchases, downloadable assets, and service booking requests in one account surface.</p>
+          <p className="metric-label">Default Focus</p>
+          <h3>Profit</h3>
+          <p className="helper-text">Ship market tests and monetize before polishing edge cases.</p>
         </article>
       </section>
 
+      <section className="panel grid-three">
+        <article>
+          <h3>AI startup offers</h3>
+          <p>Package copilots, agents, and premium workflows into conversion-ready plans and add-ons.</p>
+        </article>
+        <article>
+          <h3>Creator products</h3>
+          <p>Sell templates, prompt packs, playbooks, and micro-courses with reliable fulfillment and access control.</p>
+        </article>
+        <article>
+          <h3>Service monetization</h3>
+          <p>Close higher-ticket offers with service bookings and a built-in customer operations portal.</p>
+        </article>
+      </section>
+
+      <section className="panel split-grid">
+        <article>
+          <h2>Default pages included</h2>
+          <ul className="check-grid">
+            <li>Landing page with conversion-first layout</li>
+            <li>Pricing with Clerk billing table integration</li>
+            <li>Public catalog and offer detail pages</li>
+            <li>Checkout success and cancellation states</li>
+            <li>Account portal for orders, downloads, subscriptions, bookings</li>
+          </ul>
+        </article>
+        <article>
+          <h2>Real-world readiness</h2>
+          <ul className="check-grid">
+            <li>Resend transactional email support</li>
+            <li>Webhook-driven subscription lifecycle sync</li>
+            <li>Entitlements for product and plan gating</li>
+            <li>S3-compatible or Supabase storage backends</li>
+            <li>Seller APIs for product operations</li>
+          </ul>
+        </article>
+      </section>
+
+      <section className="panel cta-panel">
+        <h2>Ready to ship your first paid experiment this week?</h2>
+        <p>Start with one product, one price point, and one retention path. Then iterate from customer behavior.</p>
+        <div className="hero-actions">
+          <button type="button" className="button button-primary" onClick={() => onNavigate('/pricing')}>
+            Configure Pricing
+          </button>
+          <button type="button" className="button button-secondary" onClick={() => onNavigate('/app')}>
+            Open App Dashboard
+          </button>
+        </div>
+      </section>
+
       <section className="panel">
-        <h2>Pages included</h2>
+        <h2>Execution checklist</h2>
         <ul className="check-grid">
-          <li>Pricing page with Clerk Billing table</li>
-          <li>Public product catalog and product detail pages</li>
-          <li>Checkout success and cancel states</li>
-          <li>Account purchases, subscriptions, downloads, bookings</li>
-          <li>Customer dashboard and seller APIs</li>
+          <li>Define one core offer and one clear transformation promise</li>
+          <li>Add baseline analytics and ad attribution before launch</li>
+          <li>Collect emails, run onboarding sequence, and test upgrade nudges</li>
+          <li>Measure conversion by traffic source and billing plan</li>
+          <li>Cut low ROI channels and double down on what closes customers</li>
         </ul>
       </section>
     </>
@@ -974,7 +1076,7 @@ function AccountDashboard({ onNavigate }) {
   );
 }
 
-function SignedOutApp({ pathname, onNavigate }) {
+function SignedOutApp({ pathname, onNavigate, theme, onToggleTheme }) {
   const isProductDetail = pathname.startsWith('/products/');
   const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
 
@@ -989,13 +1091,19 @@ function SignedOutApp({ pathname, onNavigate }) {
 
   return (
     <main className="shell">
-      <Header pathname={pathname} onNavigate={onNavigate} signedIn={false} />
+      <Header
+        pathname={pathname}
+        onNavigate={onNavigate}
+        signedIn={false}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+      />
       {content}
     </main>
   );
 }
 
-function SignedInApp({ pathname, onNavigate }) {
+function SignedInApp({ pathname, onNavigate, theme, onToggleTheme }) {
   const { getToken } = useAuth();
   const isProductDetail = pathname.startsWith('/products/');
   const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
@@ -1031,7 +1139,13 @@ function SignedInApp({ pathname, onNavigate }) {
 
   return (
     <main className="shell">
-      <Header pathname={pathname} onNavigate={onNavigate} signedIn />
+      <Header
+        pathname={pathname}
+        onNavigate={onNavigate}
+        signedIn
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+      />
       {content}
     </main>
   );
@@ -1039,14 +1153,34 @@ function SignedInApp({ pathname, onNavigate }) {
 
 export function App() {
   const { pathname, navigate } = usePathname();
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((currentTheme) => (currentTheme === THEME_DARK ? THEME_LIGHT : THEME_DARK));
+  };
 
   return (
     <>
       <SignedOut>
-        <SignedOutApp pathname={pathname} onNavigate={navigate} />
+        <SignedOutApp
+          pathname={pathname}
+          onNavigate={navigate}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
       </SignedOut>
       <SignedIn>
-        <SignedInApp pathname={pathname} onNavigate={navigate} />
+        <SignedInApp
+          pathname={pathname}
+          onNavigate={navigate}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
       </SignedIn>
     </>
   );

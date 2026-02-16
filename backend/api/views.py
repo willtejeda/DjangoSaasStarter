@@ -22,6 +22,7 @@ from .billing import (
     extract_billing_features as extract_billing_features_from_claims,
     infer_plan_tier as infer_plan_tier_from_features,
 )
+from .emails import send_booking_requested_email, send_order_fulfilled_email
 from .models import (
     Booking,
     CustomerAccount,
@@ -221,6 +222,9 @@ def _fulfill_order(order: Order) -> Order:
     order.fulfilled_at = order.fulfilled_at or now
     order.paid_at = order.paid_at or now
     order.save(update_fields=["status", "fulfilled_at", "paid_at", "updated_at"])
+
+    # Best-effort transactional email. Purchase flow should not fail if email delivery fails.
+    send_order_fulfilled_email(order)
     return order
 
 
@@ -721,6 +725,8 @@ class AccountBookingListCreateView(generics.ListCreateAPIView):
             status=Booking.Status.REQUESTED,
             customer_notes=customer_notes,
         )
+        # Best-effort transactional email. Booking creation remains source-of-truth.
+        send_booking_requested_email(booking)
         return Response(BookingSerializer(booking).data, status=201)
 
 

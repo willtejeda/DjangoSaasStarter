@@ -17,6 +17,7 @@ from .models import (
     Product,
     Profile,
     Project,
+    ServiceOffer,
     Subscription,
 )
 from .supabase_client import _ensure_https
@@ -513,6 +514,70 @@ class CommerceApiTests(TestCase):
             1,
         )
         self.assertEqual(DownloadGrant.objects.filter(customer_account=buyer_account).count(), 1)
+
+    @patch("api.views.send_order_fulfilled_email")
+    def test_confirm_order_triggers_order_fulfillment_email(self, mock_send_order_email):
+        owner = Profile.objects.create(clerk_user_id="seller_email_1", email="seller-email@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Email Bundle",
+            slug="email-bundle",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=3900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_email_1"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+        mock_send_order_email.assert_called_once()
+
+    @patch("api.views.send_booking_requested_email")
+    def test_booking_create_triggers_booking_email(self, mock_send_booking_email):
+        owner = Profile.objects.create(clerk_user_id="seller_service_1", email="seller-service@example.com")
+        service_product = Product.objects.create(
+            owner=owner,
+            name="Founder Advisory Session",
+            slug="founder-advisory-session",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.SERVICE,
+        )
+        service_offer = ServiceOffer.objects.create(
+            product=service_product,
+            session_minutes=45,
+            delivery_days=3,
+            revision_count=1,
+            onboarding_instructions="Share your current revenue funnel before session.",
+        )
+
+        response = self._request(
+            "post",
+            "/api/account/bookings/",
+            {"service_offer": service_offer.id, "customer_notes": "Need funnel teardown"},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "requested")
+        mock_send_booking_email.assert_called_once()
 
     @override_settings(
         ASSET_STORAGE_BACKEND="supabase",

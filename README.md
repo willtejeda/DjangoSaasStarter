@@ -131,6 +131,11 @@ cd frontend && ./start.sh
 | `ASSET_STORAGE_S3_REGION` | No | Region for S3 signing (default `us-east-1`) |
 | `ASSET_STORAGE_S3_ACCESS_KEY_ID` | No | S3 access key (required when backend is `s3`) |
 | `ASSET_STORAGE_S3_SECRET_ACCESS_KEY` | No | S3 secret key (required when backend is `s3`) |
+| `FRONTEND_APP_URL` | No | Frontend origin used for deep-links in transactional emails |
+| `RESEND_API_KEY` | No | Resend API key for transactional email delivery |
+| `RESEND_FROM_EMAIL` | No | Verified sender identity for outbound emails (`Name <email@domain>`) |
+| `RESEND_REPLY_TO_EMAIL` | No | Optional reply-to email address |
+| `RESEND_TIMEOUT_SECONDS` | No | Outbound request timeout for Resend API calls (default `10`) |
 
 ### Frontend (`frontend/.env`)
 
@@ -139,6 +144,27 @@ cd frontend && ./start.sh
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key |
 | `VITE_API_BASE_URL` | Yes | Django API base URL (`http://127.0.0.1:8000/api`) |
 | `VITE_CLERK_BILLING_PORTAL_URL` | No | Optional direct billing portal link |
+
+## Resend Transactional Email Setup
+
+The starter now supports Resend for transactional buyer communication.
+
+Implemented events:
+
+- Order fulfillment confirmation
+- Booking request confirmation
+
+Setup:
+
+1. Create a domain and sender in Resend.
+2. Create an API key in Resend dashboard.
+3. Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in `backend/.env`.
+4. Set `FRONTEND_APP_URL` so email links route buyers to the correct app.
+
+Notes:
+
+- Email delivery is best-effort and does not block checkout or booking creation.
+- Requests use idempotency keys per event to reduce duplicate sends.
 
 ## Clerk Billing Setup (Products, Plans, Subscriptions)
 

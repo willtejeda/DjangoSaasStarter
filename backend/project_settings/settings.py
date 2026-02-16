@@ -185,3 +185,12 @@ ASSET_STORAGE_S3_ENDPOINT_URL = config("ASSET_STORAGE_S3_ENDPOINT_URL", default=
 ASSET_STORAGE_S3_REGION = config("ASSET_STORAGE_S3_REGION", default="us-east-1")
 ASSET_STORAGE_S3_ACCESS_KEY_ID = config("ASSET_STORAGE_S3_ACCESS_KEY_ID", default="")
 ASSET_STORAGE_S3_SECRET_ACCESS_KEY = config("ASSET_STORAGE_S3_SECRET_ACCESS_KEY", default="")
+
+# Frontend links used in transactional emails.
+FRONTEND_APP_URL = config("FRONTEND_APP_URL", default="http://127.0.0.1:5173").strip()
+
+# Resend transactional email settings.
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="")
+RESEND_REPLY_TO_EMAIL = config("RESEND_REPLY_TO_EMAIL", default="")
+RESEND_TIMEOUT_SECONDS = config("RESEND_TIMEOUT_SECONDS", cast=int, default=10)
