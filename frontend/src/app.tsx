@@ -9,34 +9,208 @@ import {
   useUser
 } from '@clerk/clerk-react';
 import { SubscriptionDetailsButton } from '@clerk/clerk-react/experimental';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useSignalEffect } from '@preact/signals-react';
+import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
+import {
+  THEME_STORAGE_KEY,
+  incrementLaunchCounterSignal,
+  launchCounterDoubleSignal,
+  launchCounterMomentumSignal,
+  launchCounterSignal,
+  nextThemeLabelSignal,
+  resetLaunchCounterSignal,
+  themeSignal,
+  toggleThemeSignal
+} from './lib/signals';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const ENABLE_DEV_MANUAL_CHECKOUT =
   (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
-const THEME_STORAGE_KEY = 'django_starter_theme';
-const THEME_DARK = 'dark';
-const THEME_LIGHT = 'light';
 
-function getInitialTheme() {
-  if (typeof window === 'undefined') {
-    return THEME_DARK;
-  }
+type Id = number | string;
+type NavigateFn = (nextPath: string) => void;
+type CheckoutStateValue = 'success' | 'cancel';
+type PlanTier = 'free' | 'pro' | 'enterprise';
+type GetTokenFn = ReturnType<typeof useAuth>['getToken'];
 
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === THEME_DARK || stored === THEME_LIGHT) {
-    return stored;
-  }
-
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return THEME_DARK;
-  }
-  return THEME_LIGHT;
+interface CopyCard {
+  title: string;
+  body?: string;
+  points: string[];
 }
 
-function formatCurrencyFromCents(cents, currency = 'USD') {
+interface WorkflowCard {
+  title: string;
+  body: string;
+}
+
+interface ActivePrice {
+  amount_cents: number;
+  currency: string;
+}
+
+interface ProductPrice {
+  id: Id;
+  name?: string | null;
+  billing_period: string;
+  amount_cents: number;
+  currency: string;
+}
+
+interface ProductAsset {
+  id: Id;
+  title: string;
+}
+
+interface ServiceOffer {
+  session_minutes: number;
+  delivery_days: number;
+  revision_count: number;
+}
+
+interface ProductRecord {
+  id: Id;
+  slug: string;
+  name: string;
+  product_type: string;
+  tagline?: string | null;
+  description?: string | null;
+  active_price?: ActivePrice | null;
+  prices?: ProductPrice[];
+  assets?: ProductAsset[];
+  service_offer?: ServiceOffer | null;
+}
+
+interface OrderRecord {
+  public_id: string;
+  status: string;
+  total_cents: number;
+  currency: string;
+  items?: unknown[];
+}
+
+interface OrderCreateResponse {
+  checkout?: {
+    checkout_url?: string | null;
+  } | null;
+  order?: {
+    public_id?: string | null;
+  } | null;
+}
+
+interface PriceSummary {
+  amount_cents: number;
+  currency: string;
+  billing_period: string;
+}
+
+interface SubscriptionRecord {
+  id: Id;
+  product_name?: string | null;
+  status: string;
+  price_summary?: PriceSummary | null;
+}
+
+interface DownloadGrant {
+  token: string;
+  asset_title: string;
+  can_download: boolean;
+  product_name: string;
+  download_count: number;
+  max_downloads: number;
+}
+
+interface DownloadAccessResponse {
+  download_url?: string | null;
+}
+
+interface BookingRecord {
+  id: Id;
+  product_name?: string | null;
+  status: string;
+  customer_notes?: string | null;
+}
+
+interface EntitlementRecord {
+  id: Id;
+  feature_key: string;
+  is_current: boolean;
+}
+
+interface MeResponse {
+  customer_account?: {
+    full_name?: string | null;
+  } | null;
+  profile?: {
+    plan_tier?: string | null;
+    first_name?: string | null;
+  } | null;
+  billing_features?: string[] | null;
+}
+
+interface BillingFeaturesResponse {
+  enabled_features: string[];
+}
+
+interface NavLinkProps {
+  to: string;
+  currentPath: string;
+  onNavigate: NavigateFn;
+  children: ReactNode;
+}
+
+interface HeaderProps {
+  pathname: string;
+  onNavigate: NavigateFn;
+  signedIn: boolean;
+  themeLabel: string;
+  onToggleTheme: () => void;
+}
+
+interface PricingPageProps {
+  signedIn: boolean;
+}
+
+interface ProductCatalogProps {
+  onNavigate: NavigateFn;
+}
+
+interface ProductDetailProps {
+  slug: string;
+  signedIn: boolean;
+  onNavigate: NavigateFn;
+  getToken: GetTokenFn;
+}
+
+interface TokenProps {
+  getToken: GetTokenFn;
+}
+
+interface CheckoutStateProps {
+  state: CheckoutStateValue;
+  onNavigate: NavigateFn;
+}
+
+interface MetricCardProps {
+  label: string;
+  value: string;
+  note: string;
+}
+
+interface NavigateProps {
+  onNavigate: NavigateFn;
+}
+
+interface SignedAppProps {
+  pathname: string;
+  onNavigate: NavigateFn;
+  themeLabel: string;
+  onToggleTheme: () => void;
+}
+
+function formatCurrencyFromCents(cents: number, currency = 'USD'): string {
   const numeric = Number(cents || 0) / 100;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -45,7 +219,7 @@ function formatCurrencyFromCents(cents, currency = 'USD') {
   }).format(numeric);
 }
 
-function inferPlanFromFeatures(features) {
+function inferPlanFromFeatures(features: ReadonlyArray<string | null | undefined> | null | undefined): PlanTier {
   const normalized = new Set((features || []).map((item) => String(item).toLowerCase()));
   if (normalized.has('enterprise')) {
     return 'enterprise';
@@ -56,8 +230,12 @@ function inferPlanFromFeatures(features) {
   return 'free';
 }
 
-function usePathname() {
-  const [pathname, setPathname] = useState(() => window.location.pathname || '/');
+function isPlanTier(value: string | null | undefined): value is PlanTier {
+  return value === 'free' || value === 'pro' || value === 'enterprise';
+}
+
+function usePathname(): { pathname: string; navigate: NavigateFn } {
+  const [pathname, setPathname] = useState<string>(() => window.location.pathname || '/');
 
   useEffect(() => {
     const onPopState = () => setPathname(window.location.pathname || '/');
@@ -65,7 +243,7 @@ function usePathname() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const navigate = (nextPath) => {
+  const navigate = (nextPath: string) => {
     if (!nextPath || nextPath === pathname) {
       return;
     }
@@ -77,7 +255,7 @@ function usePathname() {
   return { pathname, navigate };
 }
 
-function NavLink({ to, currentPath, onNavigate, children }) {
+function NavLink({ to, currentPath, onNavigate, children }: NavLinkProps): ReactElement {
   const active = currentPath === to;
 
   return (
@@ -94,7 +272,7 @@ function NavLink({ to, currentPath, onNavigate, children }) {
   );
 }
 
-function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
+function Header({ pathname, onNavigate, signedIn, themeLabel, onToggleTheme }: HeaderProps): ReactElement {
   return (
     <header className="site-header panel">
       <div className="site-brand-shell" onClick={() => onNavigate(signedIn ? '/app' : '/')}>
@@ -118,7 +296,7 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
       </nav>
       <div className="site-actions">
         <button type="button" className="button button-ghost theme-toggle" onClick={onToggleTheme}>
-          {theme === THEME_DARK ? 'Light Mode' : 'Dark Mode'}
+          {themeLabel}
         </button>
         {signedIn ? (
           <UserButton afterSignOutUrl="/" />
@@ -137,8 +315,8 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
   );
 }
 
-function MarketingHome() {
-  const jumpToSection = (sectionId) => {
+function MarketingHome(): ReactElement {
+  const jumpToSection = (sectionId: string) => {
     const section = window.document.getElementById(sectionId);
     if (!section) {
       return;
@@ -169,7 +347,7 @@ function MarketingHome() {
     }
   ];
 
-  const whoForCards = [
+  const whoForCards: CopyCard[] = [
     {
       title: 'Solo founders',
       body: 'You need first revenue in weeks, not a three month rebuild of auth and billing.',
@@ -178,7 +356,7 @@ function MarketingHome() {
     {
       title: 'Product engineers',
       body: 'You want to skip platform plumbing and focus on solving the core customer problem.',
-      points: ['Django + DRF foundation', 'Preact frontend shell', 'Account lifecycle routes included']
+      points: ['Django + DRF foundation', 'React 19 frontend shell', 'Account lifecycle routes included']
     },
     {
       title: 'Agencies and freelancers',
@@ -192,7 +370,7 @@ function MarketingHome() {
     }
   ];
 
-  const setupTracks = [
+  const setupTracks: CopyCard[] = [
     {
       title: '1. Quickstart in under an hour',
       body: 'Use the same setup flow documented in this repository.',
@@ -206,11 +384,11 @@ function MarketingHome() {
     {
       title: '3. Customize and deploy',
       body: 'Swap your offer and message while keeping payment truth server side.',
-      points: ['edit landing in app.jsx first', 'set production env and webhook secret', 'run tests, deploy check, frontend build']
+      points: ['edit landing in app.tsx first', 'set production env and webhook secret', 'run tests, deploy check, frontend build']
     }
   ];
 
-  const workflowCards = [
+  const workflowCards: WorkflowCard[] = [
     {
       title: 'Define the paid outcome',
       body: 'Pick one ideal customer and one painful problem with clear willingness to pay.'
@@ -237,7 +415,7 @@ function MarketingHome() {
     }
   ];
 
-  const capabilityGroups = [
+  const capabilityGroups: CopyCard[] = [
     {
       title: 'Revenue Core',
       points: ['Orders and order items', 'Subscriptions and plan states', 'Payment transaction tracking']
@@ -260,7 +438,7 @@ function MarketingHome() {
             <div className="landing-chip">Tailwind for SaaS apps</div>
             <h1>DjangoStarter is the revenue-ready base for shipping SaaS with vibe coding speed.</h1>
             <p className="landing-subtitle">
-              Skip blank-project chaos. You get Django + DRF backend, Preact frontend, Clerk auth and billing,
+              Skip blank-project chaos. You get Django + DRF backend, React 19 frontend, Clerk auth and billing,
               webhook-verified fulfillment, and account lifecycle pages already wired.
             </p>
             <div className="landing-actions">
@@ -272,7 +450,8 @@ function MarketingHome() {
               </button>
             </div>
             <div className="landing-proof">
-              <span>Django + DRF + Preact base</span>
+              <span>Django + DRF + React 19 base</span>
+              <span>Signal-ready state patterns</span>
               <span>Clerk auth + billing integration</span>
               <span>Webhook-first payment confirmation</span>
               <span>Digital and service fulfillment included</span>
@@ -364,6 +543,28 @@ function MarketingHome() {
         </div>
       </section>
 
+      <section className="panel signal-lab">
+        <p className="eyebrow">React 19 + Signals</p>
+        <h2>Shared state with derived values and no prop drilling</h2>
+        <p className="helper-text">
+          This demo is using <code>@preact/signals-react</code> inside React 19 components.
+          One source signal drives the count, double value, and momentum state.
+        </p>
+        <div className="feature-list">
+          <span className="feature-tag">Launch Count: {launchCounterSignal.value}</span>
+          <span className="feature-tag">Double: {launchCounterDoubleSignal.value}</span>
+          <span className="feature-tag">Momentum: {launchCounterMomentumSignal.value}</span>
+        </div>
+        <div className="hero-actions">
+          <button type="button" className="button button-primary" onClick={incrementLaunchCounterSignal}>
+            Push Signal
+          </button>
+          <button type="button" className="button button-secondary" onClick={resetLaunchCounterSignal}>
+            Reset
+          </button>
+        </div>
+      </section>
+
       <section className="panel landing-final">
         <div>
           <p className="eyebrow">Template Promise</p>
@@ -390,7 +591,7 @@ function MarketingHome() {
   );
 }
 
-function PricingPage({ signedIn }) {
+function PricingPage({ signedIn }: PricingPageProps): ReactElement {
   return (
     <section className="panel">
       <h1>Pricing</h1>
@@ -409,8 +610,8 @@ function PricingPage({ signedIn }) {
   );
 }
 
-function ProductCatalog({ onNavigate }) {
-  const [products, setProducts] = useState([]);
+function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
+  const [products, setProducts] = useState<ProductRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -419,7 +620,7 @@ function ProductCatalog({ onNavigate }) {
     setLoading(true);
     setError('');
 
-    apiRequest('/products/')
+    apiRequest<ProductRecord[]>('/products/')
       .then((payload) => {
         if (!isActive) {
           return;
@@ -478,8 +679,8 @@ function ProductCatalog({ onNavigate }) {
   );
 }
 
-function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
-  const [product, setProduct] = useState(null);
+function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailProps): ReactElement {
+  const [product, setProduct] = useState<ProductRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -495,7 +696,7 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
     setLoading(true);
     setError('');
 
-    apiRequest(`/products/${slug}/`)
+    apiRequest<ProductRecord>(`/products/${slug}/`)
       .then((payload) => {
         if (!isActive) {
           return;
@@ -519,7 +720,7 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
     };
   }, [slug]);
 
-  const handleBuy = async (priceId) => {
+  const handleBuy = async (priceId: Id): Promise<void> => {
     if (!signedIn) {
       onNavigate('/pricing');
       return;
@@ -530,10 +731,14 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
     setSuccess('');
 
     try {
-      const orderResponse = await authedRequest(getToken, '/account/orders/create/', {
-        method: 'POST',
-        body: { price_id: priceId, quantity: 1 }
-      });
+      const orderResponse = await authedRequest<OrderCreateResponse, { price_id: Id; quantity: number }>(
+        getToken,
+        '/account/orders/create/',
+        {
+          method: 'POST',
+          body: { price_id: priceId, quantity: 1 }
+        }
+      );
 
       const checkoutUrl = orderResponse?.checkout?.checkout_url || '';
       const publicId = orderResponse?.order?.public_id;
@@ -553,13 +758,17 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
         );
       }
 
-      await authedRequest(getToken, `/account/orders/${publicId}/confirm/`, {
-        method: 'POST',
-        body: {
-          provider: 'manual',
-          external_id: `manual_${Date.now()}`
+      await authedRequest<unknown, { provider: string; external_id: string }>(
+        getToken,
+        `/account/orders/${publicId}/confirm/`,
+        {
+          method: 'POST',
+          body: {
+            provider: 'manual',
+            external_id: `manual_${Date.now()}`
+          }
         }
-      });
+      );
 
       setSuccess('Purchase completed. Your fulfillment has been created.');
       onNavigate('/checkout/success');
@@ -634,16 +843,16 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
   );
 }
 
-function PurchasesPage({ getToken }) {
-  const [orders, setOrders] = useState([]);
+function PurchasesPage({ getToken }: TokenProps): ReactElement {
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadOrders = async () => {
+  const loadOrders = async (): Promise<void> => {
     setLoading(true);
     setError('');
     try {
-      const payload = await authedRequest(getToken, '/account/orders/');
+      const payload = await authedRequest<OrderRecord[]>(getToken, '/account/orders/');
       setOrders(Array.isArray(payload) ? payload : []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not load purchases.');
@@ -679,14 +888,14 @@ function PurchasesPage({ getToken }) {
   );
 }
 
-function SubscriptionsPage({ getToken }) {
-  const [subscriptions, setSubscriptions] = useState([]);
+function SubscriptionsPage({ getToken }: TokenProps): ReactElement {
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
-    authedRequest(getToken, '/account/subscriptions/')
+    authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/')
       .then((payload) => {
         if (!active) {
           return;
@@ -745,17 +954,17 @@ function SubscriptionsPage({ getToken }) {
   );
 }
 
-function DownloadsPage({ getToken }) {
-  const [grants, setGrants] = useState([]);
+function DownloadsPage({ getToken }: TokenProps): ReactElement {
+  const [grants, setGrants] = useState<DownloadGrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [accessingToken, setAccessingToken] = useState('');
 
-  const loadGrants = async () => {
+  const loadGrants = async (): Promise<void> => {
     setLoading(true);
     setError('');
     try {
-      const payload = await authedRequest(getToken, '/account/downloads/');
+      const payload = await authedRequest<DownloadGrant[]>(getToken, '/account/downloads/');
       setGrants(Array.isArray(payload) ? payload : []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not load downloads.');
@@ -768,12 +977,12 @@ function DownloadsPage({ getToken }) {
     loadGrants();
   }, []);
 
-  const requestAccess = async (token) => {
+  const requestAccess = async (token: string): Promise<void> => {
     setAccessingToken(token);
     setError('');
 
     try {
-      const payload = await authedRequest(getToken, `/account/downloads/${token}/access/`, {
+      const payload = await authedRequest<DownloadAccessResponse>(getToken, `/account/downloads/${token}/access/`, {
         method: 'POST'
       });
 
@@ -822,14 +1031,14 @@ function DownloadsPage({ getToken }) {
   );
 }
 
-function BookingsPage({ getToken }) {
-  const [bookings, setBookings] = useState([]);
+function BookingsPage({ getToken }: TokenProps): ReactElement {
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
-    authedRequest(getToken, '/account/bookings/')
+    authedRequest<BookingRecord[]>(getToken, '/account/bookings/')
       .then((payload) => {
         if (!active) {
           return;
@@ -875,7 +1084,7 @@ function BookingsPage({ getToken }) {
   );
 }
 
-function CheckoutState({ state, onNavigate }) {
+function CheckoutState({ state, onNavigate }: CheckoutStateProps): ReactElement {
   const isSuccess = state === 'success';
   return (
     <section className="panel">
@@ -897,7 +1106,7 @@ function CheckoutState({ state, onNavigate }) {
   );
 }
 
-function MetricCard({ label, value, note }) {
+function MetricCard({ label, value, note }: MetricCardProps): ReactElement {
   return (
     <article className="metric-card">
       <p className="metric-label">{label}</p>
@@ -907,17 +1116,17 @@ function MetricCard({ label, value, note }) {
   );
 }
 
-function AccountDashboard({ onNavigate }) {
+function AccountDashboard({ onNavigate }: NavigateProps): ReactElement {
   const { getToken, isLoaded, userId } = useAuth();
   const { user } = useUser();
 
-  const [me, setMe] = useState(null);
-  const [billing, setBilling] = useState({ enabled_features: [] });
-  const [orders, setOrders] = useState([]);
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [downloads, setDownloads] = useState([]);
-  const [entitlements, setEntitlements] = useState([]);
-  const [bookings, setBookings] = useState([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [billing, setBilling] = useState<BillingFeaturesResponse>({ enabled_features: [] });
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
+  const [downloads, setDownloads] = useState<DownloadGrant[]>([]);
+  const [entitlements, setEntitlements] = useState<EntitlementRecord[]>([]);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -925,7 +1134,7 @@ function AccountDashboard({ onNavigate }) {
 
   const apiBase = getApiBaseUrl();
 
-  const loadDashboard = async ({ silent = false } = {}) => {
+  const loadDashboard = async ({ silent = false }: { silent?: boolean } = {}): Promise<void> => {
     if (silent) {
       setRefreshing(true);
     } else {
@@ -943,13 +1152,13 @@ function AccountDashboard({ onNavigate }) {
         entitlementsPayload,
         bookingsPayload
       ] = await Promise.all([
-        authedRequest(getToken, '/me/'),
-        authedRequest(getToken, '/billing/features/'),
-        authedRequest(getToken, '/account/orders/'),
-        authedRequest(getToken, '/account/subscriptions/'),
-        authedRequest(getToken, '/account/downloads/'),
-        authedRequest(getToken, '/account/entitlements/'),
-        authedRequest(getToken, '/account/bookings/')
+        authedRequest<MeResponse>(getToken, '/me/'),
+        authedRequest<BillingFeaturesResponse>(getToken, '/billing/features/'),
+        authedRequest<OrderRecord[]>(getToken, '/account/orders/'),
+        authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/'),
+        authedRequest<DownloadGrant[]>(getToken, '/account/downloads/'),
+        authedRequest<EntitlementRecord[]>(getToken, '/account/entitlements/'),
+        authedRequest<BookingRecord[]>(getToken, '/account/bookings/')
       ]);
       setMe(mePayload || null);
       setBilling(billingPayload || { enabled_features: [] });
@@ -973,8 +1182,8 @@ function AccountDashboard({ onNavigate }) {
     loadDashboard();
   }, [isLoaded, userId]);
 
-  const enabledFeatures = billing.enabled_features || me?.billing_features || [];
-  const planTier = me?.profile?.plan_tier || inferPlanFromFeatures(enabledFeatures);
+  const enabledFeatures: string[] = billing.enabled_features || me?.billing_features || [];
+  const planTier = isPlanTier(me?.profile?.plan_tier) ? me.profile.plan_tier : inferPlanFromFeatures(enabledFeatures);
   const displayName =
     me?.customer_account?.full_name ||
     user?.firstName ||
@@ -1009,11 +1218,11 @@ function AccountDashboard({ onNavigate }) {
     [bookings]
   );
 
-  const requestAccess = async (token) => {
+  const requestAccess = async (token: string): Promise<void> => {
     setAccessingToken(token);
     setError('');
     try {
-      const payload = await authedRequest(getToken, `/account/downloads/${token}/access/`, {
+      const payload = await authedRequest<DownloadAccessResponse>(getToken, `/account/downloads/${token}/access/`, {
         method: 'POST'
       });
       const downloadUrl = payload?.download_url || '';
@@ -1214,7 +1423,7 @@ function AccountDashboard({ onNavigate }) {
   );
 }
 
-function SignedOutApp({ pathname, onNavigate, theme, onToggleTheme }) {
+function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }: SignedAppProps): ReactElement {
   const hiddenCatalogPath = pathname === '/pricing' || pathname === '/products' || pathname.startsWith('/products/');
   const normalizedPath = hiddenCatalogPath ? '/' : pathname;
   const content = hiddenCatalogPath ? (
@@ -1238,7 +1447,7 @@ function SignedOutApp({ pathname, onNavigate, theme, onToggleTheme }) {
         pathname={normalizedPath}
         onNavigate={onNavigate}
         signedIn={false}
-        theme={theme}
+        themeLabel={themeLabel}
         onToggleTheme={onToggleTheme}
       />
       {content}
@@ -1246,12 +1455,12 @@ function SignedOutApp({ pathname, onNavigate, theme, onToggleTheme }) {
   );
 }
 
-function SignedInApp({ pathname, onNavigate, theme, onToggleTheme }) {
+function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: SignedAppProps): ReactElement {
   const { getToken } = useAuth();
   const isProductDetail = pathname.startsWith('/products/');
   const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
 
-  let content = <AccountDashboard onNavigate={onNavigate} />;
+  let content: ReactNode = <AccountDashboard onNavigate={onNavigate} />;
 
   if (pathname === '/pricing') {
     content = <PricingPage signedIn />;
@@ -1286,7 +1495,7 @@ function SignedInApp({ pathname, onNavigate, theme, onToggleTheme }) {
         pathname={pathname}
         onNavigate={onNavigate}
         signedIn
-        theme={theme}
+        themeLabel={themeLabel}
         onToggleTheme={onToggleTheme}
       />
       {content}
@@ -1294,18 +1503,19 @@ function SignedInApp({ pathname, onNavigate, theme, onToggleTheme }) {
   );
 }
 
-export function App() {
+export function App(): ReactElement {
   const { pathname, navigate } = usePathname();
-  const [theme, setTheme] = useState(getInitialTheme);
+  useSignalEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
+    const themeValue = themeSignal.value;
+    document.documentElement.dataset.theme = themeValue;
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeValue);
+  });
 
-  const toggleTheme = () => {
-    setTheme((currentTheme) => (currentTheme === THEME_DARK ? THEME_LIGHT : THEME_DARK));
-  };
+  const themeLabel = nextThemeLabelSignal.value;
 
   return (
     <>
@@ -1313,16 +1523,16 @@ export function App() {
         <SignedOutApp
           pathname={pathname}
           onNavigate={navigate}
-          theme={theme}
-          onToggleTheme={toggleTheme}
+          themeLabel={themeLabel}
+          onToggleTheme={toggleThemeSignal}
         />
       </SignedOut>
       <SignedIn>
         <SignedInApp
           pathname={pathname}
           onNavigate={navigate}
-          theme={theme}
-          onToggleTheme={toggleTheme}
+          themeLabel={themeLabel}
+          onToggleTheme={toggleThemeSignal}
         />
       </SignedIn>
     </>

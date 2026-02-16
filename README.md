@@ -1,4 +1,4 @@
-# Django + Supabase + Clerk + Preact Commerce Starter
+# Django + Supabase + Clerk + React Commerce Starter
 
 Production-minded starter for selling digital products and services.
 
@@ -12,8 +12,8 @@ Django owns schema, migrations, data integrity, fulfillment workflows, and API c
 You get hosted Postgres, backups, SQL tools, and a cleaner data ops surface than relying only on Django admin.
 - `Clerk` handles authentication and billing.
 You offload auth/session complexity and use Clerk Billing for subscriptions and checkout.
-- `Preact` keeps frontend payloads small.
-You ship faster pages with less JS overhead while keeping React-compatible patterns.
+- `React 19` keeps the frontend modern and ecosystem-compatible.
+You can pair native React with signal-based state patterns for low-friction reactivity.
 
 ## What Ships Now
 
@@ -54,7 +54,7 @@ backend/
 frontend/
   package.json
   .env.example
-  vite.config.js
+  vite.config.ts
   src/
 ```
 
@@ -207,7 +207,7 @@ Suggested pattern:
 - `plus`: reminders, reports
 - `pro`: ai_coach, priority_support
 
-These keys should map to your product entitlements and paywall checks in Django/Preact.
+These keys should map to your product entitlements and paywall checks in Django/React.
 
 Reference:
 - [B2C billing guide](https://clerk.com/docs/guides/billing/b2c-guide)

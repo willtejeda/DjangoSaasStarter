@@ -24,7 +24,7 @@ Example:
 
 Start in:
 
-- `frontend/src/app.jsx`
+- `frontend/src/app.tsx`
 
 Update:
 

@@ -9,7 +9,7 @@ Ship deployable, monetized MVPs fast with safe defaults.
 ## Stack
 
 - Backend: Django + DRF (`backend/`)
-- Frontend: Preact + Vite (`frontend/`)
+- Frontend: React 19 + Vite (`frontend/`)
 - Auth and Billing: Clerk
 - Database: Supabase Postgres (or local SQLite for tests)
 
@@ -46,7 +46,7 @@ Output required:
 
 ### Step 2: Adapt marketing surfaces first
 
-Edit frontend messaging in `frontend/src/app.jsx` before deep backend changes.
+Edit frontend messaging in `frontend/src/app.tsx` before deep backend changes.
 
 Minimum updates:
 

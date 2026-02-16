@@ -512,6 +512,16 @@ code {
   gap: 0.9rem;
 }
 
+.signal-lab {
+  border-color: color-mix(in srgb, var(--signal) 44%, var(--border));
+  background:
+    linear-gradient(
+      144deg,
+      color-mix(in srgb, var(--signal) 14%, var(--bg-strong) 86%) 0%,
+      color-mix(in srgb, var(--accent) 10%, var(--bg-strong) 90%) 100%
+    );
+}
+
 .landing-final h2 {
   max-width: 24ch;
   font-size: clamp(1.4rem, 3vw, 2rem);
