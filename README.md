@@ -34,7 +34,7 @@ You ship faster pages with less JS overhead while keeping React-compatible patte
 - `/pricing` Clerk PricingTable billing page
 - `/products` Public catalog
 - `/products/:slug` Product detail and purchase flow
-- `/app` Signed-in operator dashboard
+- `/app` Signed-in customer account dashboard
 - `/account/purchases`
 - `/account/subscriptions`
 - `/account/downloads`
@@ -124,7 +124,13 @@ cd frontend && ./start.sh
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only Supabase key |
-| `DIGITAL_ASSET_BASE_URL` | No | Base URL used to generate downloadable asset links |
+| `ASSET_STORAGE_BACKEND` | No | `supabase` (default) or `s3` |
+| `ASSET_STORAGE_BUCKET` | Yes | Bucket/container used for digital asset objects |
+| `ASSET_STORAGE_SIGNED_URL_TTL_SECONDS` | No | Signed download URL lifetime in seconds (default `600`) |
+| `ASSET_STORAGE_S3_ENDPOINT_URL` | No | S3 compatible endpoint URL (required for most non-AWS providers) |
+| `ASSET_STORAGE_S3_REGION` | No | Region for S3 signing (default `us-east-1`) |
+| `ASSET_STORAGE_S3_ACCESS_KEY_ID` | No | S3 access key (required when backend is `s3`) |
+| `ASSET_STORAGE_S3_SECRET_ACCESS_KEY` | No | S3 secret key (required when backend is `s3`) |
 
 ### Frontend (`frontend/.env`)
 

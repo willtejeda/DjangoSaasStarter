@@ -3,17 +3,21 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as django_timezone
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .block_storage import (
+    BlockStorageConfigurationError,
+    BlockStorageError,
+    build_digital_asset_download_url,
+)
 from .billing import (
     extract_billing_features as extract_billing_features_from_claims,
     infer_plan_tier as infer_plan_tier_from_features,
@@ -647,17 +651,23 @@ class AccountDownloadAccessView(APIView):
                 status=403,
             )
 
+        try:
+            download_url = build_digital_asset_download_url(grant.asset.file_path)
+        except BlockStorageConfigurationError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except BlockStorageError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         now = django_timezone.now()
         grant.download_count += 1
         grant.last_downloaded_at = now
         grant.save(update_fields=["download_count", "last_downloaded_at", "updated_at"])
-
-        base_url = _safe_str(getattr(settings, "DIGITAL_ASSET_BASE_URL", "")).rstrip("/")
-        file_path = grant.asset.file_path.lstrip("/")
-        if base_url:
-            download_url = f"{base_url}/{file_path}?grant={grant.token}"
-        else:
-            download_url = grant.asset.file_path
 
         return Response(
             {

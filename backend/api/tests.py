@@ -412,6 +412,59 @@ class CommerceApiTests(TestCase):
             handler = getattr(self.client, method)
             return handler(path, data=data, format="json", **self.auth_headers)
 
+    def _create_fulfilled_digital_order(self):
+        suffix = Product.objects.count() + 1
+        owner = Profile.objects.create(
+            clerk_user_id=f"seller_download_{suffix}",
+            email=f"seller{suffix}@example.com",
+        )
+        product = Product.objects.create(
+            owner=owner,
+            name=f"Creator Bundle {suffix}",
+            slug=f"creator-bundle-{suffix}",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+            feature_keys=["priority_support", "templates_pack"],
+        )
+        price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=12900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+        product.active_price = price
+        product.save(update_fields=["active_price", "updated_at"])
+
+        asset = DigitalAsset.objects.create(
+            product=product,
+            title="Bundle ZIP",
+            file_path=f"files/creator-bundle-v{suffix}.zip",
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1, "notes": "test purchase"},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        public_id = create_response.data["order"]["public_id"]
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": f"txn_{suffix}"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        grant = DownloadGrant.objects.get(customer_account=buyer_profile.customer_account, asset=asset)
+        return buyer_profile.customer_account, grant, asset
+
     def test_public_catalog_only_returns_published_products(self):
         owner = Profile.objects.create(clerk_user_id="seller_1", email="seller@example.com")
         published = Product.objects.create(
@@ -454,57 +507,97 @@ class CommerceApiTests(TestCase):
         self.assertEqual(slugs, ["launch-kit"])
 
     def test_create_and_confirm_order_generates_entitlements_and_downloads(self):
-        owner = Profile.objects.create(clerk_user_id="seller_2", email="seller2@example.com")
-        product = Product.objects.create(
-            owner=owner,
-            name="Creator Bundle",
-            slug="creator-bundle",
-            visibility=Product.Visibility.PUBLISHED,
-            product_type=Product.ProductType.DIGITAL,
-            feature_keys=["priority_support", "templates_pack"],
-        )
-        price = Price.objects.create(
-            product=product,
-            name="One-time",
-            amount_cents=12900,
-            currency="USD",
-            billing_period=Price.BillingPeriod.ONE_TIME,
-            is_default=True,
-            is_active=True,
-        )
-        product.active_price = price
-        product.save(update_fields=["active_price", "updated_at"])
-
-        DigitalAsset.objects.create(
-            product=product,
-            title="Bundle ZIP",
-            file_path="files/creator-bundle-v1.zip",
-            is_active=True,
-        )
-
-        create_response = self._request(
-            "post",
-            "/api/account/orders/create/",
-            {"price_id": price.id, "quantity": 1, "notes": "test purchase"},
-        )
-        self.assertEqual(create_response.status_code, 201)
-
-        public_id = create_response.data["order"]["public_id"]
-        confirm_response = self._request(
-            "post",
-            f"/api/account/orders/{public_id}/confirm/",
-            {"provider": "manual", "external_id": "txn_123"},
-        )
-        self.assertEqual(confirm_response.status_code, 200)
-        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
-
-        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
-        buyer_account = buyer_profile.customer_account
+        buyer_account, _, _ = self._create_fulfilled_digital_order()
         self.assertEqual(
             Entitlement.objects.filter(customer_account=buyer_account, feature_key="priority_support").count(),
             1,
         )
         self.assertEqual(DownloadGrant.objects.filter(customer_account=buyer_account).count(), 1)
+
+    @override_settings(
+        ASSET_STORAGE_BACKEND="supabase",
+        ASSET_STORAGE_BUCKET="digital-assets",
+        ASSET_STORAGE_SIGNED_URL_TTL_SECONDS=900,
+        SUPABASE_URL="https://demo-project.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY="service-role-key",
+        SUPABASE_ANON_KEY="anon-key",
+    )
+    @patch("api.block_storage.get_supabase_client")
+    def test_download_access_returns_supabase_signed_url(self, mock_get_supabase_client):
+        _, grant, asset = self._create_fulfilled_digital_order()
+        storage_bucket = mock_get_supabase_client.return_value.storage.from_.return_value
+        storage_bucket.create_signed_url.return_value = {
+            "signedURL": (
+                f"/storage/v1/object/sign/digital-assets/{asset.file_path}"
+                "?token=signed-download-token"
+            )
+        }
+
+        response = self._request("post", f"/api/account/downloads/{grant.token}/access/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["download_url"],
+            (
+                f"https://demo-project.supabase.co/storage/v1/object/sign/digital-assets/{asset.file_path}"
+                "?token=signed-download-token"
+            ),
+        )
+
+        grant.refresh_from_db()
+        self.assertEqual(grant.download_count, 1)
+        mock_get_supabase_client.assert_called_once_with(use_service_role=True)
+        storage_bucket.create_signed_url.assert_called_once_with(asset.file_path, 900)
+
+    @override_settings(
+        ASSET_STORAGE_BACKEND="supabase",
+        ASSET_STORAGE_BUCKET="",
+    )
+    def test_download_access_does_not_consume_attempt_when_storage_is_unconfigured(self):
+        _, grant, _ = self._create_fulfilled_digital_order()
+
+        response = self._request("post", f"/api/account/downloads/{grant.token}/access/")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("ASSET_STORAGE_BUCKET", str(response.data.get("detail", "")))
+
+        grant.refresh_from_db()
+        self.assertEqual(grant.download_count, 0)
+
+    @override_settings(
+        ASSET_STORAGE_BACKEND="s3",
+        ASSET_STORAGE_BUCKET="digital-assets",
+        ASSET_STORAGE_SIGNED_URL_TTL_SECONDS=600,
+        ASSET_STORAGE_S3_ENDPOINT_URL="https://storage.example.com",
+        ASSET_STORAGE_S3_REGION="us-east-1",
+        ASSET_STORAGE_S3_ACCESS_KEY_ID="access-key",
+        ASSET_STORAGE_S3_SECRET_ACCESS_KEY="secret-key",
+    )
+    @patch("api.block_storage._cached_s3_client")
+    def test_download_access_returns_s3_compatible_signed_url(self, mock_cached_s3_client):
+        _, grant, asset = self._create_fulfilled_digital_order()
+        mock_cached_s3_client.return_value.generate_presigned_url.return_value = (
+            "https://storage.example.com/digital-assets/signed-download-url"
+        )
+
+        response = self._request("post", f"/api/account/downloads/{grant.token}/access/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["download_url"],
+            "https://storage.example.com/digital-assets/signed-download-url",
+        )
+
+        grant.refresh_from_db()
+        self.assertEqual(grant.download_count, 1)
+        mock_cached_s3_client.assert_called_once_with(
+            "https://storage.example.com",
+            "us-east-1",
+            "access-key",
+            "secret-key",
+        )
+        mock_cached_s3_client.return_value.generate_presigned_url.assert_called_once_with(
+            ClientMethod="get_object",
+            Params={"Bucket": "digital-assets", "Key": asset.file_path},
+            ExpiresIn=600,
+        )
 
     def test_confirm_recurring_order_creates_subscription(self):
         owner = Profile.objects.create(clerk_user_id="seller_3", email="seller3@example.com")

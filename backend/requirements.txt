@@ -7,3 +7,4 @@ supabase
 clerk-backend-api
 psycopg[binary]
 svix
+boto3

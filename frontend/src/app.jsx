@@ -14,7 +14,6 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
-const PROJECT_STATUSES = ['idea', 'building', 'live', 'paused'];
 
 function formatCurrencyFromCents(cents, currency = 'USD') {
   const numeric = Number(cents || 0) / 100;
@@ -22,15 +21,6 @@ function formatCurrencyFromCents(cents, currency = 'USD') {
     style: 'currency',
     currency,
     maximumFractionDigits: 2
-  }).format(numeric);
-}
-
-function formatCurrencyFromUnits(value, currency = 'USD') {
-  const numeric = Number(value || 0);
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0
   }).format(numeric);
 }
 
@@ -159,7 +149,7 @@ function MarketingHome({ onNavigate }) {
           <li>Public product catalog and product detail pages</li>
           <li>Checkout success and cancel states</li>
           <li>Account purchases, subscriptions, downloads, bookings</li>
-          <li>Operator dashboard and seller APIs</li>
+          <li>Customer dashboard and seller APIs</li>
         </ul>
       </section>
     </>
@@ -677,44 +667,62 @@ function MetricCard({ label, value, note }) {
   );
 }
 
-function OperatorDashboard({ onNavigate }) {
+function AccountDashboard({ onNavigate }) {
   const { getToken, isLoaded, userId } = useAuth();
   const { user } = useUser();
 
   const [me, setMe] = useState(null);
-  const [projects, setProjects] = useState([]);
   const [billing, setBilling] = useState({ enabled_features: [] });
   const [orders, setOrders] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [downloads, setDownloads] = useState([]);
+  const [entitlements, setEntitlements] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({
-    name: '',
-    summary: '',
-    monthly_recurring_revenue: '0'
-  });
+  const [accessingToken, setAccessingToken] = useState('');
 
   const apiBase = getApiBaseUrl();
 
-  const loadDashboard = async () => {
-    setLoading(true);
+  const loadDashboard = async ({ silent = false } = {}) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError('');
 
     try {
-      const [mePayload, projectsPayload, billingPayload, ordersPayload] = await Promise.all([
+      const [
+        mePayload,
+        billingPayload,
+        ordersPayload,
+        subscriptionsPayload,
+        downloadsPayload,
+        entitlementsPayload,
+        bookingsPayload
+      ] = await Promise.all([
         authedRequest(getToken, '/me/'),
-        authedRequest(getToken, '/projects/'),
         authedRequest(getToken, '/billing/features/'),
-        authedRequest(getToken, '/account/orders/')
+        authedRequest(getToken, '/account/orders/'),
+        authedRequest(getToken, '/account/subscriptions/'),
+        authedRequest(getToken, '/account/downloads/'),
+        authedRequest(getToken, '/account/entitlements/'),
+        authedRequest(getToken, '/account/bookings/')
       ]);
       setMe(mePayload || null);
-      setProjects(Array.isArray(projectsPayload) ? projectsPayload : []);
       setBilling(billingPayload || { enabled_features: [] });
       setOrders(Array.isArray(ordersPayload) ? ordersPayload : []);
+      setSubscriptions(Array.isArray(subscriptionsPayload) ? subscriptionsPayload : []);
+      setDownloads(Array.isArray(downloadsPayload) ? downloadsPayload : []);
+      setEntitlements(Array.isArray(entitlementsPayload) ? entitlementsPayload : []);
+      setBookings(Array.isArray(bookingsPayload) ? bookingsPayload : []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load dashboard data.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -727,71 +735,56 @@ function OperatorDashboard({ onNavigate }) {
 
   const enabledFeatures = billing.enabled_features || me?.billing_features || [];
   const planTier = me?.profile?.plan_tier || inferPlanFromFeatures(enabledFeatures);
-
-  const totalMrr = useMemo(
-    () => projects.reduce((sum, project) => sum + Number(project.monthly_recurring_revenue || 0), 0),
-    [projects]
-  );
+  const displayName =
+    me?.customer_account?.full_name ||
+    user?.firstName ||
+    me?.profile?.first_name ||
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.username ||
+    user?.id ||
+    'there';
 
   const paidOrders = useMemo(
     () => orders.filter((order) => ['paid', 'fulfilled'].includes(order.status)).length,
     [orders]
   );
 
-  const updateStatus = async (projectId, nextStatus) => {
-    setSaving(true);
+  const activeSubscriptions = useMemo(
+    () => subscriptions.filter((subscription) => ['active', 'trialing', 'past_due'].includes(subscription.status)),
+    [subscriptions]
+  );
+
+  const readyDownloads = useMemo(
+    () => downloads.filter((grant) => grant.can_download).length,
+    [downloads]
+  );
+
+  const currentEntitlements = useMemo(
+    () => entitlements.filter((entitlement) => entitlement.is_current).length,
+    [entitlements]
+  );
+
+  const openServiceRequests = useMemo(
+    () => bookings.filter((booking) => ['requested', 'confirmed'].includes(booking.status)).length,
+    [bookings]
+  );
+
+  const requestAccess = async (token) => {
+    setAccessingToken(token);
     setError('');
     try {
-      await authedRequest(getToken, `/projects/${projectId}/`, {
-        method: 'PATCH',
-        body: { status: nextStatus }
+      const payload = await authedRequest(getToken, `/account/downloads/${token}/access/`, {
+        method: 'POST'
       });
-      await loadDashboard();
+      const downloadUrl = payload?.download_url || '';
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank', 'noopener');
+      }
+      await loadDashboard({ silent: true });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not update project status.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not generate download access.');
     } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteProject = async (projectId) => {
-    setSaving(true);
-    setError('');
-    try {
-      await authedRequest(getToken, `/projects/${projectId}/`, { method: 'DELETE' });
-      await loadDashboard();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not delete project.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const createProject = async (event) => {
-    event.preventDefault();
-    if (!form.name.trim()) {
-      setError('Project name is required.');
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    try {
-      await authedRequest(getToken, '/projects/', {
-        method: 'POST',
-        body: {
-          name: form.name,
-          summary: form.summary,
-          monthly_recurring_revenue: form.monthly_recurring_revenue || '0',
-          status: 'idea'
-        }
-      });
-      setForm({ name: '', summary: '', monthly_recurring_revenue: '0' });
-      await loadDashboard();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not create project.');
-    } finally {
-      setSaving(false);
+      setAccessingToken('');
     }
   };
 
@@ -799,110 +792,180 @@ function OperatorDashboard({ onNavigate }) {
     <>
       <section className="metrics-grid">
         <MetricCard label="Plan" value={planTier.toUpperCase()} note={`${enabledFeatures.length} features enabled`} />
-        <MetricCard label="Portfolio MRR" value={formatCurrencyFromUnits(totalMrr)} note={`${projects.length} tracked projects`} />
-        <MetricCard label="Paid Orders" value={String(paidOrders)} note="Orders marked paid or fulfilled" />
+        <MetricCard label="Paid Orders" value={String(paidOrders)} note={`${orders.length} total purchases`} />
+        <MetricCard label="Active Subs" value={String(activeSubscriptions.length)} note={`${subscriptions.length} total subscriptions`} />
+        <MetricCard label="Ready Downloads" value={String(readyDownloads)} note={`${downloads.length} total deliveries`} />
+        <MetricCard label="Feature Access" value={String(currentEntitlements)} note="Current entitlements" />
+        <MetricCard label="Open Requests" value={String(openServiceRequests)} note="Service bookings in progress" />
       </section>
 
       {error ? <section className="panel warning-panel">{error}</section> : null}
 
       <section className="panel split-grid">
         <article>
-          <h2>Add project</h2>
-          <form className="project-form" onSubmit={createProject}>
-            <label>
-              Name
-              <input
-                type="text"
-                value={form.name}
-                onInput={(event) => setForm((state) => ({ ...state, name: event.currentTarget.value }))}
-                placeholder="CreatorFlywheel"
-              />
-            </label>
-            <label>
-              Summary
-              <textarea
-                rows="3"
-                value={form.summary}
-                onInput={(event) => setForm((state) => ({ ...state, summary: event.currentTarget.value }))}
-                placeholder="Digital workbook funnel + premium subscription"
-              />
-            </label>
-            <label>
-              Expected MRR (USD)
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.monthly_recurring_revenue}
-                onInput={(event) =>
-                  setForm((state) => ({ ...state, monthly_recurring_revenue: event.currentTarget.value }))
-                }
-              />
-            </label>
-            <button type="submit" className="button button-primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Create Project'}
-            </button>
-          </form>
-        </article>
-
-        <article>
-          <h2>Execution queue</h2>
-          {loading ? <p>Loading projects...</p> : null}
-          {!loading && projects.length === 0 ? <p>No projects yet. Create one and ship your offer this week.</p> : null}
-          <div className="project-list">
-            {projects.map((project) => (
-              <article className="project-card" key={project.id}>
-                <div className="project-heading">
-                  <h3>{project.name}</h3>
-                  <span className={`pill pill-${project.status}`}>{project.status}</span>
-                </div>
-                <p>{project.summary || 'No summary yet.'}</p>
-                <p className="project-mrr">Target MRR: {formatCurrencyFromUnits(project.monthly_recurring_revenue)}</p>
-                <div className="project-actions">
-                  <select
-                    value={project.status}
-                    onChange={(event) => updateStatus(project.id, event.currentTarget.value)}
-                    disabled={saving}
-                  >
-                    {PROJECT_STATUSES.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="button button-ghost"
-                    onClick={() => deleteProject(project.id)}
-                    disabled={saving}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="panel split-grid">
-        <article>
-          <h2>Commerce shortcuts</h2>
+          <p className="eyebrow">Account Home</p>
+          <h2>Welcome back, {displayName}.</h2>
+          <p>
+            This dashboard keeps your subscriptions, orders, and downloadable purchases in one place.
+          </p>
           <div className="hero-actions">
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>Catalog</button>
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/purchases')}>Purchases</button>
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/downloads')}>Downloads</button>
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/bookings')}>Bookings</button>
+            <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+              Browse Products
+            </button>
+            <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
+              View Pricing
+            </button>
+            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/purchases')}>
+              View Purchases
+            </button>
+            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/downloads')}>
+              View Downloads
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => onNavigate('/account/subscriptions')}
+            >
+              View Subscriptions
+            </button>
+            <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/bookings')}>
+              View Bookings
+            </button>
           </div>
-        </article>
-        <article>
-          <h2>Developer context</h2>
-          <p className="helper-text">API base: <code>{apiBase}</code></p>
           {BILLING_PORTAL_URL ? (
             <a className="button button-secondary" href={BILLING_PORTAL_URL} target="_blank" rel="noreferrer">
               Manage Billing
             </a>
           ) : (
-            <p className="helper-text">Set <code>VITE_CLERK_BILLING_PORTAL_URL</code> to expose a billing portal link.</p>
+            <SubscriptionDetailsButton>
+              <button type="button" className="button button-secondary">Manage Billing</button>
+            </SubscriptionDetailsButton>
           )}
+        </article>
+
+        <article>
+          <h2>Recent purchases</h2>
+          {loading ? <p>Loading purchases...</p> : null}
+          {!loading && orders.length === 0 ? <p>No purchases yet.</p> : null}
+          <div className="order-list">
+            {orders.slice(0, 5).map((order) => (
+              <article className="order-card" key={order.public_id}>
+                <div className="project-heading">
+                  <h3>Order {String(order.public_id).slice(0, 8)}</h3>
+                  <span className={`pill pill-${order.status}`}>{order.status}</span>
+                </div>
+                <p>Total: {formatCurrencyFromCents(order.total_cents, order.currency)}</p>
+                <p>{order.items?.length || 0} item(s)</p>
+              </article>
+            ))}
+          </div>
+          <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/purchases')}>
+            Open Purchases
+          </button>
+        </article>
+      </section>
+
+      <section className="panel split-grid">
+        <article>
+          <h2>Digital deliveries</h2>
+          {loading ? <p>Loading downloads...</p> : null}
+          {!loading && downloads.length === 0 ? <p>No digital deliveries available yet.</p> : null}
+          <div className="order-list">
+            {downloads.slice(0, 5).map((grant) => (
+              <article className="order-card" key={grant.token}>
+                <div className="project-heading">
+                  <h3>{grant.asset_title}</h3>
+                  <span className={`pill ${grant.can_download ? 'pill-live' : 'pill-paused'}`}>
+                    {grant.can_download ? 'ready' : 'locked'}
+                  </span>
+                </div>
+                <p>{grant.product_name}</p>
+                <p>{grant.download_count}/{grant.max_downloads} downloads used</p>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  disabled={!grant.can_download || accessingToken === grant.token}
+                  onClick={() => requestAccess(grant.token)}
+                >
+                  {accessingToken === grant.token ? 'Preparing...' : 'Download'}
+                </button>
+              </article>
+            ))}
+          </div>
+          <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/downloads')}>
+            Open Downloads
+          </button>
+        </article>
+
+        <article>
+          <h2>Subscriptions and access</h2>
+          {loading ? <p>Loading subscriptions...</p> : null}
+          {!loading && activeSubscriptions.length === 0 ? <p>No active subscriptions found.</p> : null}
+          <div className="order-list">
+            {activeSubscriptions.slice(0, 4).map((subscription) => (
+              <article className="order-card" key={subscription.id}>
+                <div className="project-heading">
+                  <h3>{subscription.product_name || 'Subscription'}</h3>
+                  <span className={`pill pill-${subscription.status}`}>{subscription.status}</span>
+                </div>
+                <p>
+                  {subscription.price_summary
+                    ? `${formatCurrencyFromCents(subscription.price_summary.amount_cents, subscription.price_summary.currency)} ${subscription.price_summary.billing_period}`
+                    : 'No linked local price'}
+                </p>
+              </article>
+            ))}
+          </div>
+          <h3>Current feature access</h3>
+          {entitlements.filter((entitlement) => entitlement.is_current).length === 0 ? (
+            <p className="helper-text">No active entitlements yet.</p>
+          ) : (
+            <div className="feature-list">
+              {entitlements
+                .filter((entitlement) => entitlement.is_current)
+                .slice(0, 8)
+                .map((entitlement) => (
+                  <span className="feature-tag" key={entitlement.id}>
+                    {entitlement.feature_key}
+                  </span>
+                ))}
+            </div>
+          )}
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => onNavigate('/account/subscriptions')}
+          >
+            Open Subscriptions
+          </button>
+        </article>
+      </section>
+
+      <section className="panel split-grid">
+        <article>
+          <h2>Service bookings</h2>
+          {loading ? <p>Loading booking requests...</p> : null}
+          {!loading && bookings.length === 0 ? <p>No booking requests yet.</p> : null}
+          <div className="order-list">
+            {bookings.slice(0, 4).map((booking) => (
+              <article className="order-card" key={booking.id}>
+                <div className="project-heading">
+                  <h3>{booking.product_name || 'Service booking'}</h3>
+                  <span className={`pill pill-${booking.status}`}>{booking.status}</span>
+                </div>
+                <p>{booking.customer_notes || 'No notes provided.'}</p>
+              </article>
+            ))}
+          </div>
+          <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/bookings')}>
+            Open Bookings
+          </button>
+        </article>
+        <article>
+          <h2>Developer context</h2>
+          <p className="helper-text">API base: <code>{apiBase}</code></p>
+          <p className="helper-text">Data refresh: {refreshing ? 'updating now' : 'automatic on page load and downloads'}</p>
+          <p className="helper-text">Use the account routes for full detail views.</p>
         </article>
       </section>
 
@@ -937,7 +1000,7 @@ function SignedInApp({ pathname, onNavigate }) {
   const isProductDetail = pathname.startsWith('/products/');
   const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
 
-  let content = <OperatorDashboard onNavigate={onNavigate} />;
+  let content = <AccountDashboard onNavigate={onNavigate} />;
 
   if (pathname === '/pricing') {
     content = <PricingPage signedIn />;
