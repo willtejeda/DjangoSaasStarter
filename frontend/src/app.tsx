@@ -298,7 +298,7 @@ function Header({ pathname, onNavigate, signedIn, expandedNav, themeLabel, onTog
         <div className="site-brand-mark">DS</div>
         <div className="site-brand-text">
           <strong className="site-brand">DjangoStarter</strong>
-          <span className="site-brand-subtitle">Launch stack for AI and creator SaaS</span>
+          <span className="site-brand-subtitle">Revenue-first stack for creator SaaS</span>
         </div>
       </div>
       <nav className="site-nav" aria-label="Primary">
@@ -391,144 +391,196 @@ function MarketingHome(): ReactElement {
 
   const proofStats = [
     {
-      label: 'Ideal Customer',
-      value: 'Technical founder with first paid offer',
-      note: 'One person shipping one monetized workflow with strict payment truth.'
+      label: 'Audience',
+      value: 'Technical creators and micro teams',
+      note: 'People with shipping skills who need clearer monetization systems.'
     },
     {
-      label: 'Core Promise',
-      value: 'From idea to trusted checkout fast',
-      note: 'You get billing, fulfillment, and account surfaces without writing platform glue.'
+      label: 'Promise',
+      value: 'Trusted checkout to fulfillment path',
+      note: 'Payment truth is verified by webhook events before entitlement delivery.'
     },
     {
-      label: 'Primary Outcome',
-      value: 'Launch one working revenue loop in 7 days',
-      note: 'Then optimize headline, offer packaging, and conversion.'
+      label: 'Goal',
+      value: 'First real revenue loop in 7 days',
+      note: 'Then iterate message, offer, and channel based on buyer behavior.'
     }
   ];
 
-  const contrastCards: CopyCard[] = [
+  const frictionCards: CopyCard[] = [
     {
-      title: 'Typical starter failure mode',
-      body: 'Teams ship UI quickly, then burn weeks patching payment and access drift.',
+      title: 'Traffic shows up but revenue leaks',
+      body: 'Most starter stacks feel polished until real buyers hit checkout.',
       points: [
-        'Client shows paid before server confirms payment',
-        'Fulfillment logic branches in too many places',
-        'Account pages feel empty and support-heavy after checkout'
+        'Client marks orders paid before the server can verify',
+        'Delivery logic breaks when payment status changes',
+        'Customers lose trust after a failed first purchase'
       ]
     },
     {
-      title: 'DjangoStarter mission path',
-      body: 'You launch the first paid loop on rails, then iterate where revenue actually moves.',
+      title: 'DjangoStarter fixes the money handoff',
+      body: 'You ship one paid offer with strict backend verification and clean account UX.',
       points: [
-        'Order status changes from verified Clerk events',
-        'Entitlements and fulfillment run server-side only',
-        'Buyers instantly see purchases, subscriptions, and downloads'
+        'Pending orders originate in server APIs',
+        'Webhook events confirm paid state before fulfillment',
+        'Buyers can access purchases, downloads, and subscriptions immediately'
       ]
     }
   ];
 
-  const launchPath = [
+  const revenueRails = [
     {
-      title: 'Step 1: Position one paid offer',
-      body: 'Pick one painful problem, one target buyer, and one concrete promised result.'
+      title: 'Server creates the order truth',
+      body: 'Checkout starts only after `POST /api/account/orders/create/` records a pending order.'
     },
     {
-      title: 'Step 2: Configure catalog and price',
-      body: 'Create one product and one active price in seller endpoints. Keep it simple.'
+      title: 'Clerk webhook verifies payment',
+      body: 'Payment confirmation runs through `/api/webhooks/clerk/` so paid state is not spoofed in the client.'
     },
     {
-      title: 'Step 3: Validate payment truth',
-      body: 'Run order create and webhook confirmation. Ensure paid state is server-verified.'
+      title: 'Fulfillment runs after verification',
+      body: 'Digital downloads, subscriptions, and service bookings unlock only after verified payment events.'
     },
     {
-      title: 'Step 4: Validate fulfillment',
-      body: 'Confirm download grants, subscriptions, entitlements, or bookings appear after payment.'
+      title: 'Account routes become your trust layer',
+      body: 'Customers see purchases, downloads, subscriptions, and bookings in one coherent post-checkout experience.'
+    }
+  ];
+
+  const sprintPlan = [
+    {
+      day: 'Day 1',
+      title: 'Nail one painful outcome',
+      body: 'Define one buyer, one problem, one paid promise. Kill extra scope.',
+      fallback: 'If stuck, interview two recent users and extract repeated pain language.'
     },
     {
-      title: 'Step 5: Tighten conversion copy',
-      body: 'Once the loop works, improve messaging and CTAs without touching payment contracts.'
+      day: 'Day 2',
+      title: 'Publish one priced offer',
+      body: 'Create one product, one active default price, and one clear CTA.',
+      fallback: 'If pricing is unclear, start with a mid-tier anchor and test willingness fast.'
+    },
+    {
+      day: 'Day 3',
+      title: 'Run payment verification tests',
+      body: 'Validate pending to paid transition through Clerk webhook events.',
+      fallback: 'If events fail, inspect webhook logs before touching frontend assumptions.'
+    },
+    {
+      day: 'Day 4',
+      title: 'Validate fulfillment states',
+      body: 'Confirm downloads, subscriptions, entitlements, or bookings appear only after payment.',
+      fallback: 'If missing, audit fulfillment handlers and entitlement keys first.'
+    },
+    {
+      day: 'Day 5',
+      title: 'Tighten conversion copy',
+      body: 'Rewrite headline, CTA labels, and offer bullets using buyer pain language.',
+      fallback: 'If copy feels vague, replace adjectives with measurable outcomes and timelines.'
+    },
+    {
+      day: 'Day 6 and 7',
+      title: 'Launch and collect signal',
+      body: 'Push to one distribution channel, watch checkout behavior, and iterate quickly.',
+      fallback: 'If traffic is low, run direct outreach and partner posts before buying ads.'
     }
   ];
 
   const shippedSurfaces: CopyCard[] = [
     {
-      title: 'Core Commerce APIs',
-      points: ['Catalog and pricing models', 'Order creation and confirmation paths', 'Subscription and entitlement lifecycle']
+      title: 'Commerce Core',
+      points: ['Catalog and pricing models', 'Order creation plus webhook confirmation', 'Entitlement and fulfillment lifecycle']
     },
     {
-      title: 'Buyer Account Surfaces',
-      points: ['/account/purchases', '/account/downloads', '/account/subscriptions and /account/bookings']
+      title: 'Customer Experience',
+      points: ['Account purchases and downloads', 'Subscriptions and billing views', 'Bookings for service-style offers']
     },
     {
-      title: 'Seller and Ops Controls',
-      points: ['Seller product and price endpoints', 'Webhook receiver with signature verification', 'Deploy checks and backend test coverage']
+      title: 'Seller Ops',
+      points: ['Seller endpoints for products and prices', 'Payment event verification path', 'Launch checklist and deploy safety checks']
     },
     {
-      title: 'Developer Workflow',
-      points: ['React 19 + Django + DRF base', 'Clerk auth and billing integration', 'Local and production safety flags']
+      title: 'Build Velocity',
+      points: ['Django + DRF backend', 'React 19 frontend with Clerk auth and billing', 'Production-safe feature flags for checkout confirmation']
+    }
+  ];
+
+  const scenarioStats = [
+    {
+      label: 'Starter offer',
+      value: '$79',
+      note: 'Single digital product or implementation template.'
+    },
+    {
+      label: '20 buyers',
+      value: '$1,580',
+      note: 'Gross top line before platform fees and delivery costs.'
+    },
+    {
+      label: 'Upsell at 25%',
+      value: '+$495',
+      note: 'If 5 buyers add a $99 support or coaching upsell.'
     }
   ];
 
   return (
     <>
-      <header className="panel reset-hero">
-        <div className="reset-hero-grid">
-          <div className="reset-hero-main">
-            <p className="reset-kicker">One Offer. One Buyer. One Revenue Loop.</p>
-            <h1 className="reset-title">Launch a trustworthy paid SaaS flow without rebuilding platform plumbing.</h1>
-            <p className="reset-subtitle">
-              This starter is built for technical founders launching their first paid AI workflow product.
-              It gives you a strict backend payment contract plus account surfaces that actually work after checkout.
+      <header className="panel tactical-hero">
+        <div className="tactical-hero-grid">
+          <div className="tactical-hero-main">
+            <p className="tactical-kicker">Tactical Growth Stack for Creator SaaS</p>
+            <h1 className="tactical-title">Creators do not need more boilerplate. They need reliable cash flow.</h1>
+            <p className="tactical-subtitle">
+              DjangoStarter gives technical creators one coherent route from offer to paid fulfillment.
+              You launch faster, protect payment truth, and keep customer trust when real money is on the line.
             </p>
-            <div className="reset-actions">
+            <div className="tactical-actions">
               <SignUpButton mode="modal">
-                <button type="button" className="button button-primary">Start Your First Revenue Loop</button>
+                <button type="button" className="button button-primary">Start Free and Build Revenue Loop</button>
               </SignUpButton>
-              <button type="button" className="button button-secondary" onClick={() => jumpToSection('mission-path')}>
-                See Mission Path
+              <button type="button" className="button button-secondary" onClick={() => jumpToSection('income-map')}>
+                Why Creators Stall
               </button>
-              <button type="button" className="button button-secondary" onClick={() => jumpToSection('first-week')}>
-                See First Week Plan
+              <button type="button" className="button button-secondary" onClick={() => jumpToSection('launch-sprint')}>
+                7 Day Launch Sprint
               </button>
             </div>
-            <div className="reset-pill-row">
-              <span>ICP: Technical Founder</span>
-              <span>Offer: One Paid Workflow</span>
-              <span>Django + DRF</span>
-              <span>React 19</span>
-              <span>Webhook Verified Orders</span>
+            <div className="tactical-pill-row">
+              <span>One offer first</span>
+              <span>Webhook verified payments</span>
+              <span>Digital plus service fulfillment</span>
+              <span>Account UX that matches checkout promises</span>
             </div>
           </div>
 
-          <aside className="reset-hero-aside">
-            <p className="eyebrow">Why this feels different</p>
-            <h3>The default path is launch-first, not framework-first.</h3>
+          <aside className="tactical-hero-aside">
+            <p className="eyebrow">Creator reality</p>
+            <h3>Great content does not matter if money flow breaks after checkout.</h3>
             <ul className="check-grid">
-              <li>Start with one buyer outcome instead of broad feature lists</li>
-              <li>Keep payment and access truth on the server from day one</li>
-              <li>Use account routes as a living QA and onboarding surface</li>
+              <li>Conversion spikes die when payment state and delivery state diverge</li>
+              <li>Support costs rise fast when users cannot find what they bought</li>
+              <li>Clean onboarding and account routes protect repeat revenue</li>
             </ul>
           </aside>
         </div>
 
-        <div className="reset-stat-grid">
+        <div className="tactical-proof-grid">
           {proofStats.map((stat) => (
-            <article className="reset-stat-card" key={stat.label}>
-              <p className="reset-stat-label">{stat.label}</p>
+            <article className="tactical-proof-card" key={stat.label}>
+              <p className="tactical-proof-label">{stat.label}</p>
               <h3>{stat.value}</h3>
-              <p className="reset-stat-note">{stat.note}</p>
+              <p className="tactical-proof-note">{stat.note}</p>
             </article>
           ))}
         </div>
       </header>
 
-      <section className="panel reset-section" id="mission-path">
-        <p className="eyebrow">Mission Path</p>
-        <h2>Fix the one thing that kills most MVP launches: unreliable revenue state.</h2>
-        <div className="reset-two-up">
-          {contrastCards.map((card) => (
-            <article className="reset-card" key={card.title}>
+      <section className="panel tactical-section" id="income-map">
+        <p className="eyebrow">Why This Matters</p>
+        <h2>Most creator stacks fail in the handoff between checkout confidence and delivery confidence.</h2>
+        <div className="tactical-friction-grid">
+          {frictionCards.map((card) => (
+            <article className="tactical-card" key={card.title}>
               <h3>{card.title}</h3>
               <p>{card.body}</p>
               <ul className="check-grid">
@@ -541,33 +593,48 @@ function MarketingHome(): ReactElement {
         </div>
       </section>
 
-      <section className="panel reset-section" id="first-week">
-        <p className="eyebrow">First Week Plan</p>
-        <h2>Follow this sequence and you get a working paid loop without seeded data.</h2>
-        <ol className="reset-path">
-          {launchPath.map((item, index) => (
-            <li className="reset-path-item" key={item.title}>
-              <span className="reset-path-index">{index + 1}</span>
-              <div className="reset-path-body">
+      <section className="panel tactical-section" id="profit-engine">
+        <p className="eyebrow">Revenue Protection Rails</p>
+        <h2>Conversion only counts if your backend proves payment and fulfills correctly every time.</h2>
+        <ol className="tactical-rails">
+          {revenueRails.map((item, index) => (
+            <li className="tactical-rail" key={item.title}>
+              <span className="tactical-rail-index">{index + 1}</span>
+              <div className="tactical-rail-body">
                 <strong>{item.title}</strong>
                 <p>{item.body}</p>
               </div>
             </li>
           ))}
         </ol>
-        <div className="reset-actions">
+      </section>
+
+      <section className="panel tactical-section" id="launch-sprint">
+        <p className="eyebrow">7 Day Launch Sprint</p>
+        <h2>Scope hard. Ship one monetized loop. Fix friction only where money moves.</h2>
+        <div className="tactical-sprint-grid">
+          {sprintPlan.map((step) => (
+            <article className="tactical-sprint-card" key={step.day}>
+              <p className="tactical-sprint-day">{step.day}</p>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+              <p className="tactical-fallback">If stuck: {step.fallback}</p>
+            </article>
+          ))}
+        </div>
+        <div className="tactical-actions">
           <button type="button" className="button button-secondary" onClick={() => jumpToSection('included-surfaces')}>
-            See Included Surfaces
+            Explore Included Surfaces
           </button>
         </div>
       </section>
 
-      <section className="panel reset-section" id="included-surfaces">
+      <section className="panel tactical-section" id="included-surfaces">
         <p className="eyebrow">Included Surfaces</p>
-        <h2>Everything needed for a strict revenue loop is already wired.</h2>
-        <div className="landing-capability-grid">
+        <h2>Everything needed for a strict revenue loop ships ready for your offer strategy.</h2>
+        <div className="tactical-friction-grid">
           {shippedSurfaces.map((group) => (
-            <article className="reset-card" key={group.title}>
+            <article className="tactical-card" key={group.title}>
               <h3>{group.title}</h3>
               <ul className="check-grid">
                 {group.points.map((point) => (
@@ -579,9 +646,23 @@ function MarketingHome(): ReactElement {
         </div>
       </section>
 
-      <section className="panel signal-lab">
-        <p className="eyebrow">React 19 + Signals Example</p>
-        <h2>The template also includes a live state example for fast frontend experimentation.</h2>
+      <section className="panel tactical-math">
+        <p className="eyebrow">Simple Money Math</p>
+        <h2>Use this as planning fuel while you tune conversion. It is an example, not a guarantee.</h2>
+        <div className="tactical-proof-grid">
+          {scenarioStats.map((item) => (
+            <article className="tactical-proof-card tactical-proof-card-highlight" key={item.label}>
+              <p className="tactical-proof-label">{item.label}</p>
+              <h3>{item.value}</h3>
+              <p className="tactical-proof-note">{item.note}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel signal-lab tactical-signal">
+        <p className="eyebrow">Growth Sandbox</p>
+        <h2>React 19 Signals are wired so you can prototype conversion-focused UI quickly.</h2>
         <p className="helper-text">
           One signal updates the launch count, derived double, and momentum state across the UI.
         </p>
@@ -600,17 +681,17 @@ function MarketingHome(): ReactElement {
         </div>
       </section>
 
-      <section className="panel landing-final">
+      <section className="panel landing-final tactical-final">
         <div>
           <p className="eyebrow">Bottom Line</p>
-          <h2>If your first paid loop is not trustworthy, nothing else matters.</h2>
+          <h2>If your first paid loop is not trustworthy, your audience will not buy twice.</h2>
           <p className="helper-text">
-            Use this starter to get payment truth, fulfillment, and customer account behavior correct first.
+            Build trust first, then scale content and distribution with confidence.
           </p>
         </div>
-        <div className="landing-final-actions">
+        <div className="tactical-actions">
           <SignUpButton mode="modal">
-            <button type="button" className="button button-primary">Start Free and Launch</button>
+            <button type="button" className="button button-primary">Start Free and Launch This Week</button>
           </SignUpButton>
           <SignInButton mode="modal">
             <button type="button" className="button button-secondary">Sign In</button>
