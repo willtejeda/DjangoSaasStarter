@@ -11,7 +11,8 @@ Read these docs in order:
 3. `docs/03-api-cheatsheet.md`
 4. `docs/04-troubleshooting.md`
 5. `docs/05-customize-template.md`
-6. `docs/StackAnalysis.md`
+6. `docs/06-resend-transactional-email.md`
+7. `docs/StackAnalysis.md`
 
 ## Why This Stack
 
@@ -25,6 +26,24 @@ You get hosted Postgres, backups, SQL tools, and a cleaner data ops surface than
 You offload auth/session complexity and use Clerk Billing for subscriptions and checkout.
 - `React 19` keeps the frontend modern and ecosystem-compatible.
 You can pair native React with signal-based state patterns for low-friction reactivity.
+
+## Questions New Users Ask
+
+### Why do I need this starter?
+
+Because shipping an MVP is not the hard part. Shipping stable payments, fulfillment, and account lifecycle flows is.
+This starter removes that risk layer so you can focus on offer quality and distribution.
+
+### What problem does this solve?
+
+Most early SaaS builds lose weeks rebuilding the same platform plumbing:
+
+- Authentication and billing wiring
+- Checkout to paid order state transitions
+- Fulfillment and entitlement delivery after payment
+- Customer account views for purchases, downloads, subscriptions, and bookings
+
+DjangoStarter gives you those foundations already connected so you can ship a paid product faster with fewer production mistakes.
 
 ## What Ships Now
 
@@ -224,6 +243,8 @@ Notes:
 
 - Email delivery is best-effort and does not block checkout or booking creation.
 - Requests use idempotency keys per event to reduce duplicate sends.
+
+See `docs/06-resend-transactional-email.md` for the full operator guide and troubleshooting flow.
 
 ## Clerk Billing Setup (Products, Plans, Subscriptions)
 

@@ -138,6 +138,36 @@ Fix:
 - `CLERK_WEBHOOK_SIGNING_SECRET` must match Clerk dashboard value
 - Confirm your public URL resolves to this backend
 
+## Order or booking succeeds but no email arrives
+
+Problem:
+
+- `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing
+- Sender domain is not verified in Resend
+- Buyer has no `billing_email` or profile `email`
+- Resend rejected the request
+
+Fix:
+
+1. Confirm env values in `backend/.env`:
+
+```bash
+FRONTEND_APP_URL=http://127.0.0.1:5173
+RESEND_API_KEY=re_xxx
+RESEND_FROM_EMAIL=Acme <updates@yourdomain.com>
+RESEND_REPLY_TO_EMAIL=support@yourdomain.com
+```
+
+2. Restart backend after env changes.
+3. Confirm your sender is verified in Resend dashboard.
+4. Confirm customer profile has an email:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/profile/
+```
+
+5. Retry purchase or booking and check backend logs for Resend warnings.
+
 ## CORS errors in browser
 
 Problem:

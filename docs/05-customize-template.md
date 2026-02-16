@@ -57,7 +57,28 @@ Service products:
 - Upsert `ServiceOffer` for each service product
 - Validate bookings can be created from account routes
 
-## 5. Keep payment truth server-side
+## 5. Configure transactional email
+
+Use Resend for buyer lifecycle communication.
+
+Required env in `backend/.env`:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+
+Recommended:
+
+- `FRONTEND_APP_URL` so email deep links route to your app
+- `RESEND_REPLY_TO_EMAIL` for support and replies
+
+Implemented sends:
+
+- Order fulfillment confirmation
+- Booking request confirmation
+
+Delivery is best-effort and should never block checkout or booking creation.
+
+## 6. Keep payment truth server-side
 
 Required production behavior:
 
@@ -74,7 +95,7 @@ Local-only flags:
 
 Keep all three disabled in production.
 
-## 6. Validate signed-in account UX
+## 7. Validate signed-in account UX
 
 Test these paths with both empty and populated data:
 
@@ -86,7 +107,14 @@ Test these paths with both empty and populated data:
 
 Fix any console errors before deployment.
 
-## 7. Ship only after quality gates pass
+## 8. Validate outbound email behavior
+
+Before launch, verify both events in a staging-like environment:
+
+1. Complete one paid order and confirm the fulfillment email send in Resend.
+2. Create one booking request and confirm the booking email send in Resend.
+
+## 9. Ship only after quality gates pass
 
 ```bash
 cd ./backend
@@ -97,7 +125,7 @@ cd ./frontend
 npm run build
 ```
 
-## 8. Track launch metrics from day one
+## 10. Track launch metrics from day one
 
 Track weekly:
 

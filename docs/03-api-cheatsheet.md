@@ -299,3 +299,28 @@ POST /api/webhooks/clerk/
 ```
 
 Production rule: do not fake webhook confirmations. Use Clerk webhook delivery with valid `CLERK_WEBHOOK_SIGNING_SECRET`.
+
+## 8. Resend transactional email behavior
+
+Email sends are triggered by backend workflows, not direct email endpoints:
+
+- Order fulfillment sends a confirmation email after payment is verified and the order is fulfilled.
+- Booking creation sends a booking confirmation email.
+
+Relevant API calls that can trigger these flows:
+
+- `POST /api/account/orders/create/` then payment verification and fulfillment
+- `POST /api/account/orders/<public_id>/confirm/` for local manual flow only
+- `POST /api/account/bookings/`
+
+Required env for send attempts:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+
+Optional but recommended:
+
+- `FRONTEND_APP_URL` for email deep links
+- `RESEND_REPLY_TO_EMAIL`
+
+Important: delivery is best-effort and does not block checkout or booking creation.

@@ -10,6 +10,7 @@ import {
 } from '@clerk/clerk-react';
 import { SubscriptionDetailsButton } from '@clerk/clerk-react/experimental';
 import { useSignalEffect } from '@preact/signals-react';
+import { useSignals } from '@preact/signals-react/runtime';
 import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
@@ -316,6 +317,8 @@ function Header({ pathname, onNavigate, signedIn, themeLabel, onToggleTheme }: H
 }
 
 function MarketingHome(): ReactElement {
+  useSignals();
+
   const jumpToSection = (sectionId: string) => {
     const section = window.document.getElementById(sectionId);
     if (!section) {
@@ -344,6 +347,36 @@ function MarketingHome(): ReactElement {
     {
       title: 'Ship your custom SaaS',
       body: 'Replace marketing and account UX fast while keeping payment and fulfillment guardrails.'
+    }
+  ];
+
+  const buyerQuestionCards: CopyCard[] = [
+    {
+      title: 'Why do I need this?',
+      body: 'Shipping features is easier than shipping reliable buyer flows. This starter handles the risky layer.',
+      points: [
+        'Stop rebuilding auth, checkout, and account lifecycle surfaces for every new MVP',
+        'Launch a paid offer in days with fewer moving parts',
+        'Use production-minded defaults so money and access rules stay safe'
+      ]
+    },
+    {
+      title: 'What problem does this solve?',
+      body: 'It closes the gap between a demo that works and a product customers can buy from safely.',
+      points: [
+        'Avoid broken payment state with webhook-verified order confirmation',
+        'Avoid fulfillment drift with server-side entitlement and delivery flows',
+        'Avoid launch delay with ready-made buyer account pages and API contracts'
+      ]
+    },
+    {
+      title: 'What changes for me?',
+      body: 'You spend time on offer, positioning, and customer outcomes instead of platform plumbing.',
+      points: [
+        'Keep pricing and catalog data server-driven',
+        'Validate one revenue loop end to end before scaling',
+        'Iterate product UX without risking payment and fulfillment contracts'
+      ]
     }
   ];
 
@@ -438,15 +471,15 @@ function MarketingHome(): ReactElement {
             <div className="landing-chip">Tailwind for SaaS apps</div>
             <h1>DjangoStarter is the revenue-ready base for shipping SaaS with vibe coding speed.</h1>
             <p className="landing-subtitle">
-              Skip blank-project chaos. You get Django + DRF backend, React 19 frontend, Clerk auth and billing,
-              webhook-verified fulfillment, and account lifecycle pages already wired.
+              Most MVPs stall on auth, billing, and fulfillment edge cases. This starter gives you Django + DRF,
+              React 19, Clerk auth and billing, webhook-verified fulfillment, and account pages already wired.
             </p>
             <div className="landing-actions">
               <SignUpButton mode="modal">
                 <button type="button" className="button button-primary">Start Free and Build</button>
               </SignUpButton>
-              <button type="button" className="button button-secondary" onClick={() => jumpToSection('getting-started')}>
-                See Getting Started
+              <button type="button" className="button button-secondary" onClick={() => jumpToSection('why-this-starter')}>
+                Why This Starter
               </button>
             </div>
             <div className="landing-proof">
@@ -480,6 +513,23 @@ function MarketingHome(): ReactElement {
           </aside>
         </div>
       </header>
+
+      <section className="panel" id="why-this-starter">
+        <h2>Answers to the first buyer questions</h2>
+        <div className="landing-capability-grid">
+          {buyerQuestionCards.map((card) => (
+            <article className="landing-capability-card" key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+              <ul className="check-grid">
+                {card.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="panel" id="who-for">
         <h2>Who this starter is for</h2>
@@ -1504,6 +1554,8 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
 }
 
 export function App(): ReactElement {
+  useSignals();
+
   const { pathname, navigate } = usePathname();
   useSignalEffect(() => {
     if (typeof window === 'undefined') {

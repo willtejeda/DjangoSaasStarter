@@ -56,9 +56,18 @@ CLERK_WEBHOOK_SIGNING_SECRET=whsec_xxx
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_ANON_KEY=eyXXXX
 ASSET_STORAGE_BUCKET=digital-assets
+FRONTEND_APP_URL=http://127.0.0.1:5173
+RESEND_API_KEY=re_xxx
+RESEND_FROM_EMAIL=Acme <updates@yourdomain.com>
 ```
 
 You can keep the remaining values from `.env.example` while bootstrapping locally.
+
+Resend notes:
+
+- `FRONTEND_APP_URL` is used for deep links in email content.
+- `RESEND_REPLY_TO_EMAIL` is optional.
+- If `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing, email sending is skipped.
 
 ## 5. Health checks
 

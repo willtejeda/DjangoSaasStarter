@@ -121,7 +121,31 @@ print("recent_entitlements", [e.feature_key for e in entitlements])
 PY
 ```
 
-## 5. Production safety reset
+If Resend is configured, this fulfillment should also trigger a transactional order confirmation email.
+
+Quick checks:
+
+- Backend logs may include `Resend accepted email request`.
+- Your Resend dashboard activity should show an outbound send.
+- The recipient is resolved from `customer_account.billing_email` and fallback `profile.email`.
+
+## 5. Verify booking confirmation email flow
+
+Create a booking request from frontend (`/account/bookings`) or API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/account/bookings/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_offer": PUT_SERVICE_OFFER_ID_HERE,
+    "customer_notes": "Need onboarding help."
+  }'
+```
+
+If Resend is configured, booking creation should trigger a transactional booking confirmation email.
+
+## 6. Production safety reset
 
 Before real deployment, set these back:
 
