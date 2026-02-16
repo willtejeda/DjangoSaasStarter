@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.test import APIRequestFactory, APIClient
 
 from .authentication import ClerkJWTAuthentication
@@ -20,7 +20,7 @@ from .webhooks import (
 
 class ClerkJWTAuthenticationTests(SimpleTestCase):
     def setUp(self):
-        self.factory = APIRequestFactory()
+        self.factory = APIRequestFactory(enforce_csrf_checks=True)
         self.authentication = ClerkJWTAuthentication()
 
     def test_returns_none_without_token(self):
@@ -49,6 +49,31 @@ class ClerkJWTAuthenticationTests(SimpleTestCase):
 
         self.assertEqual(user.clerk_user_id, "user_cookie")
         self.assertEqual(request.clerk_token, "cookie-token")
+
+    @patch("api.authentication.decode_clerk_token")
+    def test_cookie_auth_requires_csrf_for_unsafe_method(self, decode_token):
+        decode_token.return_value = {"sub": "user_cookie"}
+        request = self.factory.post("/api/projects/", data={"name": "x"}, format="json")
+        request.COOKIES["__session"] = "cookie-token"
+
+        with self.assertRaises(PermissionDenied):
+            self.authentication.authenticate(request)
+
+    @patch("api.authentication.decode_clerk_token")
+    def test_cookie_auth_accepts_valid_csrf_for_unsafe_method(self, decode_token):
+        decode_token.return_value = {"sub": "user_cookie"}
+        csrf_token = "a" * 32
+        request = self.factory.post(
+            "/api/projects/",
+            data={"name": "x"},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        request.COOKIES["__session"] = "cookie-token"
+        request.COOKIES["csrftoken"] = csrf_token
+
+        user, _ = self.authentication.authenticate(request)
+        self.assertEqual(user.clerk_user_id, "user_cookie")
 
     def test_invalid_authorization_header_missing_token(self):
         request = self.factory.get(

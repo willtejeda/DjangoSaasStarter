@@ -115,6 +115,7 @@ Protected endpoints support:
 - Clerk `__session` cookie
 
 Django verifies tokens against Clerk JWKS with supported asymmetric algorithms.
+When using cookie auth on unsafe methods (`POST`, `PATCH`, `DELETE`, etc.), CSRF validation is required.
 
 ## Billing and Entitlements
 
