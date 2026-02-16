@@ -24,7 +24,6 @@ import {
   type DownloadAccessResponse,
   type DownloadGrant,
   type EntitlementRecord,
-  type GetTokenFn,
   type HeaderProps,
   type Id,
   type MeResponse,
@@ -61,15 +60,12 @@ import {
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
 import {
   THEME_STORAGE_KEY,
-  incrementLaunchCounterSignal,
-  launchCounterDoubleSignal,
-  launchCounterMomentumSignal,
-  launchCounterSignal,
   nextThemeLabelSignal,
-  resetLaunchCounterSignal,
   themeSignal,
   toggleThemeSignal,
 } from './lib/signals';
+import { ExamplesPage } from './features/examples/examples-page';
+import { ToastProvider, useToast } from './features/app-shell/toast';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const ENABLE_DEV_MANUAL_CHECKOUT =
@@ -116,7 +112,7 @@ function NavLink({ to, currentPath, onNavigate, children }: NavLinkProps): React
     <a
       href={to}
       className={cn(
-        'rounded-lg px-3 py-2 text-sm font-medium transition',
+        'rounded-xl px-3 py-2 text-sm font-semibold transition',
         active
           ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
@@ -131,10 +127,10 @@ function NavLink({ to, currentPath, onNavigate, children }: NavLinkProps): React
   );
 }
 
-function Header({ pathname, onNavigate, signedIn, expandedNav, themeLabel, onToggleTheme }: HeaderProps): ReactElement {
+function Header({ pathname, onNavigate, signedIn, themeLabel, onToggleTheme }: HeaderProps): ReactElement {
   return (
-    <header className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/85 sm:px-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <header className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/92 px-5 py-4 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/88 sm:px-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <button
           type="button"
           className="flex items-center gap-3 text-left"
@@ -151,20 +147,13 @@ function Header({ pathname, onNavigate, signedIn, expandedNav, themeLabel, onTog
           </span>
         </button>
 
-        <nav className="flex flex-wrap items-center gap-1">
+        <nav className="flex flex-wrap items-center gap-2">
           <NavLink to={signedIn ? '/app' : '/'} currentPath={pathname} onNavigate={onNavigate}>
             {signedIn ? 'Dashboard' : 'Home'}
           </NavLink>
-          {signedIn ? <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Offers</NavLink> : null}
-          {signedIn ? <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink> : null}
-          {signedIn && expandedNav ? (
-            <>
-              <NavLink to="/account/purchases" currentPath={pathname} onNavigate={onNavigate}>Purchases</NavLink>
-              <NavLink to="/account/downloads" currentPath={pathname} onNavigate={onNavigate}>Downloads</NavLink>
-              <NavLink to="/account/subscriptions" currentPath={pathname} onNavigate={onNavigate}>Subscriptions</NavLink>
-              <NavLink to="/account/bookings" currentPath={pathname} onNavigate={onNavigate}>Bookings</NavLink>
-            </>
-          ) : null}
+          <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Offers</NavLink>
+          <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink>
+          <NavLink to="/examples" currentPath={pathname} onNavigate={onNavigate}>Examples</NavLink>
         </nav>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -186,6 +175,63 @@ function Header({ pathname, onNavigate, signedIn, expandedNav, themeLabel, onTog
         </div>
       </div>
     </header>
+  );
+}
+
+function Sidebar({ pathname, onNavigate, signedIn }: { pathname: string; onNavigate: NavigateFn; signedIn: boolean }): ReactElement {
+  const signedInLinks = [
+    { label: 'Dashboard', to: '/app' },
+    { label: 'Offers', to: '/products' },
+    { label: 'Pricing', to: '/pricing' },
+    { label: 'Purchases', to: '/account/purchases' },
+    { label: 'Downloads', to: '/account/downloads' },
+    { label: 'Subscriptions', to: '/account/subscriptions' },
+    { label: 'Bookings', to: '/account/bookings' },
+    { label: 'Examples', to: '/examples' },
+  ];
+
+  const publicLinks = [
+    { label: 'Home', to: '/' },
+    { label: 'Offers', to: '/products' },
+    { label: 'Pricing', to: '/pricing' },
+    { label: 'Examples', to: '/examples' },
+  ];
+
+  const links = signedIn ? signedInLinks : publicLinks;
+
+  return (
+    <aside className="h-fit rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/85 lg:sticky lg:top-28">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Navigation</p>
+      <nav className="mt-3 grid gap-2">
+        {links.map((link) => {
+          const active = pathname === link.to;
+          return (
+            <a
+              key={link.to}
+              href={link.to}
+              className={cn(
+                'rounded-xl px-3 py-2 text-sm font-semibold transition',
+                active
+                  ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+              )}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(link.to);
+              }}
+            >
+              {link.label}
+            </a>
+          );
+        })}
+      </nav>
+      <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Mission</p>
+        <p className="mt-1 text-xs leading-relaxed text-emerald-800 dark:text-emerald-200">
+          Ship one paid loop first. Then optimize retention and traffic.
+        </p>
+      </div>
+    </aside>
   );
 }
 
@@ -241,8 +287,6 @@ function StatCard({ label, value, note }: { label: string; value: string; note: 
 }
 
 function MarketingHome(): ReactElement {
-  useSignals();
-
   const jumpTo = (sectionId: string): void => {
     const section = window.document.getElementById(sectionId);
     if (!section) {
@@ -348,17 +392,30 @@ function MarketingHome(): ReactElement {
               <li>Your app ships with account pages users can trust</li>
               <li>Your agent can extend features without breaking the revenue loop</li>
             </ul>
-            <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Signal sandbox</p>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">Launch Count: {launchCounterSignal.value}</span>
-                <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">Double: {launchCounterDoubleSignal.value}</span>
-                <span className="rounded-full bg-white px-2 py-1 capitalize dark:bg-slate-900">Momentum: {launchCounterMomentumSignal.value}</span>
+            <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Starter revenue pulse</p>
+              <div className="space-y-2">
+                {[
+                  { label: 'Week 1', value: 18 },
+                  { label: 'Week 2', value: 36 },
+                  { label: 'Week 3', value: 57 },
+                  { label: 'Week 4', value: 72 },
+                ].map((item) => (
+                  <div key={item.label} className="grid grid-cols-[72px,1fr,42px] items-center gap-2">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{item.label}</p>
+                    <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500"
+                        style={{ width: `${item.value}%` }}
+                      />
+                    </div>
+                    <p className="text-right text-xs font-semibold text-slate-600 dark:text-slate-300">{item.value}%</p>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-2">
-                <button type="button" className={buttonSecondary} onClick={incrementLaunchCounterSignal}>Push</button>
-                <button type="button" className={buttonGhost} onClick={resetLaunchCounterSignal}>Reset</button>
-              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Use this as a reminder to optimize offer clarity before adding feature complexity.
+              </p>
             </div>
           </aside>
         </div>
@@ -474,6 +531,7 @@ function PricingPage({ signedIn }: PricingPageProps): ReactElement {
 }
 
 function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
+  const notify = useToast();
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -494,7 +552,9 @@ function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
         if (!isActive) {
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : 'Could not load catalog.');
+        const detail = requestError instanceof Error ? requestError.message : 'Could not load catalog.';
+        setError(detail);
+        notify({ title: 'Catalog request failed', detail, variant: 'error' });
       })
       .finally(() => {
         if (isActive) {
@@ -574,6 +634,7 @@ function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
 }
 
 function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailProps): ReactElement {
+  const notify = useToast();
   const [product, setProduct] = useState<ProductRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -665,9 +726,16 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
       );
 
       setSuccess('Purchase completed. Fulfillment has been created.');
+      notify({
+        title: 'Manual checkout confirmed',
+        detail: 'Order marked paid for local development mode.',
+        variant: 'success',
+      });
       onNavigate('/checkout/success');
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not complete purchase flow.');
+      const detail = requestError instanceof Error ? requestError.message : 'Could not complete purchase flow.';
+      setError(detail);
+      notify({ title: 'Checkout action failed', detail, variant: 'error' });
     } finally {
       setSaving(false);
     }
@@ -951,6 +1019,7 @@ function SubscriptionsPage({ getToken, onNavigate }: TokenNavigateProps): ReactE
 }
 
 function DownloadsPage({ getToken, onNavigate }: TokenNavigateProps): ReactElement {
+  const notify = useToast();
   const [grants, setGrants] = useState<DownloadGrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -963,7 +1032,9 @@ function DownloadsPage({ getToken, onNavigate }: TokenNavigateProps): ReactEleme
       const payload = await authedRequest<DownloadGrant[]>(getToken, '/account/downloads/');
       setGrants(Array.isArray(payload) ? payload : []);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not load downloads.');
+      const detail = requestError instanceof Error ? requestError.message : 'Could not load downloads.';
+      setError(detail);
+      notify({ title: 'Download list failed', detail, variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -986,9 +1057,12 @@ function DownloadsPage({ getToken, onNavigate }: TokenNavigateProps): ReactEleme
       if (downloadUrl) {
         window.open(downloadUrl, '_blank', 'noopener');
       }
+      notify({ title: 'Download link ready', detail: 'Signed URL generated for this asset.', variant: 'success' });
       await loadGrants();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not generate download access.');
+      const detail = requestError instanceof Error ? requestError.message : 'Could not generate download access.';
+      setError(detail);
+      notify({ title: 'Download generation failed', detail, variant: 'error' });
     } finally {
       setAccessingToken('');
     }
@@ -1209,6 +1283,7 @@ function UsageBar({ bucket }: { bucket: AiUsageBucketRecord }): ReactElement {
 }
 
 function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElement {
+  const notify = useToast();
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
 
@@ -1383,7 +1458,13 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
         }
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load dashboard data.');
+      const detail = requestError instanceof Error ? requestError.message : 'Failed to load dashboard data.';
+      setError(detail);
+      notify({
+        title: 'Dashboard sync failed',
+        detail,
+        variant: 'error',
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -1458,6 +1539,13 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
         sentAt,
         running: false,
       });
+      if (payload.sent) {
+        notify({
+          title: 'Preflight email sent',
+          detail,
+          variant: 'success',
+        });
+      }
       if (typeof window !== 'undefined' && payload.sent) {
         window.localStorage.setItem(
           PREFLIGHT_EMAIL_STORAGE_KEY,
@@ -1469,12 +1557,14 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
       }
       await loadDashboard({ silent: true });
     } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : 'Could not send test email.';
       setEmailTestStatus((previous) => ({
         ...previous,
         sent: false,
         running: false,
-        detail: requestError instanceof Error ? requestError.message : 'Could not send test email.',
+        detail,
       }));
+      notify({ title: 'Email test failed', detail, variant: 'error' });
     }
   };
 
@@ -1562,9 +1652,12 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
       if (downloadUrl) {
         window.open(downloadUrl, '_blank', 'noopener');
       }
+      notify({ title: 'Download link ready', detail: 'Signed URL generated for this asset.', variant: 'success' });
       await loadDashboard({ silent: true });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not generate download access.');
+      const detail = requestError instanceof Error ? requestError.message : 'Could not generate download access.';
+      setError(detail);
+      notify({ title: 'Download generation failed', detail, variant: 'error' });
     } finally {
       setAccessingToken('');
     }
@@ -1730,7 +1823,14 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
       <section className={cn(sectionClass, 'space-y-6')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Recent activity</h2>
-          <button type="button" className={buttonSecondary} onClick={() => loadDashboard({ silent: true })}>
+          <button
+            type="button"
+            className={buttonSecondary}
+            onClick={() => {
+              notify({ title: 'Refreshing dashboard', detail: 'Rechecking current integration state.' });
+              void loadDashboard({ silent: true });
+            }}
+          >
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
@@ -1905,7 +2005,9 @@ function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElemen
 function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }: SignedAppProps): ReactElement {
   const hiddenCatalogPath = pathname === '/pricing' || pathname === '/products' || pathname.startsWith('/products/');
   const normalizedPath = hiddenCatalogPath ? '/' : pathname;
-  const content = hiddenCatalogPath ? (
+  const content = pathname === '/examples' ? (
+    <ExamplesPage onNavigate={onNavigate} />
+  ) : hiddenCatalogPath ? (
     <>
       <section className={cn(sectionClass, 'border-amber-300 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-900/20')}>
         <PageIntro
@@ -1921,16 +2023,18 @@ function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signe
   );
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1380px] px-4 pb-24 pt-7 sm:px-7 lg:px-10">
       <Header
         pathname={normalizedPath}
         onNavigate={onNavigate}
         signedIn={false}
-        expandedNav={false}
         themeLabel={themeLabel}
         onToggleTheme={onToggleTheme}
       />
-      {content}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[250px,minmax(0,1fr)]">
+        <Sidebar pathname={normalizedPath} onNavigate={onNavigate} signedIn={false} />
+        <div className="space-y-6">{content}</div>
+      </div>
     </main>
   );
 }
@@ -1945,6 +2049,8 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
     content = <PricingPage signedIn />;
   } else if (pathname === '/products') {
     content = <ProductCatalog onNavigate={onNavigate} />;
+  } else if (pathname === '/examples') {
+    content = <ExamplesPage onNavigate={onNavigate} />;
   } else if (isProductDetail && productSlug) {
     content = <ProductDetail slug={productSlug} signedIn onNavigate={onNavigate} getToken={getToken} />;
   } else if (pathname === '/account/purchases') {
@@ -1977,16 +2083,18 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1380px] px-4 pb-24 pt-7 sm:px-7 lg:px-10">
       <Header
         pathname={pathname}
         onNavigate={onNavigate}
         signedIn
-        expandedNav
         themeLabel={themeLabel}
         onToggleTheme={onToggleTheme}
       />
-      {content}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[250px,minmax(0,1fr)]">
+        <Sidebar pathname={pathname} onNavigate={onNavigate} signedIn />
+        <div className="space-y-6">{content}</div>
+      </div>
     </main>
   );
 }
@@ -2010,7 +2118,7 @@ export function App(): ReactElement {
   const themeLabel = nextThemeLabelSignal.value;
 
   return (
-    <>
+    <ToastProvider>
       <SignedOut>
         <SignedOutApp
           pathname={pathname}
@@ -2027,6 +2135,6 @@ export function App(): ReactElement {
           onToggleTheme={toggleThemeSignal}
         />
       </SignedIn>
-    </>
+    </ToastProvider>
   );
 }

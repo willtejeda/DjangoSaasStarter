@@ -1,83 +1,63 @@
 # 07 Agent Skills Playbook
 
-Goal: define how to build reliable project-specific skills and agent instructions for this repo.
+Goal: create skills that help agents ship revenue-critical work safely.
 
-## What research says works
+## Skill quality bar
 
-These patterns were used to design the recommendations in this file:
+Each skill should:
 
-- OpenAI Agents Python docs emphasize explicit instructions plus guardrails for tool safety and predictable behavior.
-  - https://github.com/openai/openai-agents-python
-- OpenAI Cookbook examples show better outcomes when prompts include strict output contracts and evaluation loops.
-  - https://github.com/openai/openai-cookbook
-- Codex `skill-creator` guidance emphasizes concise skills, progressive disclosure, and reusable scripts.
-  - `/Users/will/.codex/skills/.system/skill-creator/SKILL.md`
+1. Have a narrow trigger condition
+2. Produce a concrete artifact
+3. Include validation commands
+4. Respect payment and schema contracts
+5. Be easy to delete or replace
 
-## Skill design rules for DjangoStarter
+## Skill structure
 
-1. Keep trigger descriptions specific.
-2. Define exact outputs and acceptance criteria.
-3. Use deterministic scripts for fragile tasks (migrations, fixtures, test orchestration).
-4. Keep `SKILL.md` short, move long references to `references/`.
-5. Include safety checks that enforce project non-negotiables.
-6. Add an eval step at the end of each skill workflow.
+- `SKILL.md` with:
+  - trigger
+  - inputs
+  - steps
+  - output format
+  - validation checks
+- Optional reference files for long examples
+- Optional script folder for repeatable commands
 
-## Non-negotiables every skill must enforce
+## Good skill patterns for this repo
 
-- Do not bypass webhook-based payment truth in production.
-- Keep Django as schema owner.
-- Keep production flags safe:
-  - `ORDER_CONFIRM_ALLOW_MANUAL=False`
-  - `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False`
-- Run quality gates before completion:
-  - `python3 manage.py test api -v2 --noinput`
-  - `python3 manage.py check --deploy`
-  - `npm run build`
+- Revenue loop audit
+- Schema ownership guard
+- Frontend-backend contract checker
+- Preflight validator
+- Offer copy optimizer
+- Onboarding funnel analyzer
 
-## Skill template
+## UX-first authoring checklist
 
-```md
----
-name: skill-name
-description: When this skill should trigger and what it produces.
----
+Before finalizing a skill, answer from beginner viewpoint:
 
-# Skill Name
+1. What button or endpoint do I touch first?
+2. What should happen next if it works?
+3. What failure message should I expect?
+4. What is the one command to confirm success?
 
-## Inputs expected
-- ...
+## Example validation block
 
-## Workflow
-1. ...
-2. ...
-3. ...
+```bash
+cd /Users/will/Code/CodexProjects/DjangoStarter/backend
+DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 
-## Output contract
-- ...
-
-## Validation
-- command 1
-- command 2
+cd /Users/will/Code/CodexProjects/DjangoStarter/frontend
+npm run build
 ```
 
-## Project skills included in this repo
+## Keep skills outcome-focused
 
-- `agent-skills/revenue-loop-audit/SKILL.md`
-- `agent-skills/schema-ownership-guard/SKILL.md`
-- `agent-skills/frontend-backend-contract/SKILL.md`
-- `agent-skills/preflight-validator/SKILL.md`
+Bad: "Refactor models"
 
-## How to use these skills
+Good: "Add usage limit model for image generation and expose summary API with tests"
 
-1. Copy selected folders to your Codex skills directory (`$CODEX_HOME/skills`).
-2. Keep names and descriptions short and explicit so trigger matching works.
-3. Run each skill on a real task, then tighten ambiguous wording.
-4. Keep only reusable workflow logic in skills. Keep product specifics in repo docs.
+## Related files
 
-## Fast QA checklist for new skills
-
-- Trigger sentence is clear and narrow.
-- Output format is explicit.
-- Safety checks are present.
-- Workflow references real repo paths.
-- Validation commands run successfully.
+- `/Users/will/Code/CodexProjects/DjangoStarter/agent-skills/README.md`
+- `/Users/will/Code/CodexProjects/DjangoStarter/AGENTS.md`

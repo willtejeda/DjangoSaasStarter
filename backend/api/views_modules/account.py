@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import timedelta
 from typing import Any
@@ -49,6 +50,8 @@ from ..serializers import (
     SubscriptionSerializer,
 )
 from .helpers import _safe_dict, _safe_str, get_request_customer_account
+
+logger = logging.getLogger(__name__)
 
 
 def _billing_period_end(start_at, billing_period: str):
@@ -249,6 +252,7 @@ class AccountPreflightEmailTestView(APIView):
 
     def post(self, request):
         if not resend_is_configured():
+            logger.warning("Preflight email test requested without Resend configuration.")
             return Response(
                 {
                     "sent": False,
@@ -262,6 +266,7 @@ class AccountPreflightEmailTestView(APIView):
         account = get_request_customer_account(request)
         sent, recipient = send_preflight_test_email(account)
         if not sent:
+            logger.warning("Preflight email send failed for account %s.", account.id)
             return Response(
                 {
                     "sent": False,
@@ -278,6 +283,7 @@ class AccountPreflightEmailTestView(APIView):
         metadata["preflight_email_last_recipient"] = recipient
         account.metadata = metadata
         account.save(update_fields=["metadata", "updated_at"])
+        logger.info("Preflight email send succeeded for account %s to %s.", account.id, recipient)
 
         return Response(
             {
@@ -345,6 +351,13 @@ class AccountOrderCreateView(APIView):
         checkout_url = ""
         metadata = price.metadata if isinstance(price.metadata, dict) else {}
         checkout_url = _safe_str(metadata.get("checkout_url"))
+        logger.info(
+            "Created pending order %s for account %s (price_id=%s, quantity=%s).",
+            order.public_id,
+            account.id,
+            price.id,
+            quantity,
+        )
 
         return Response(
             {
@@ -424,6 +437,13 @@ class AccountOrderConfirmView(APIView):
             clerk_checkout_id=clerk_checkout_id,
             raw_payload=raw_payload,
         )
+        logger.info(
+            "Order confirmation requested for %s by account %s via %s (already_confirmed=%s).",
+            order.public_id,
+            account.id,
+            provider,
+            already_confirmed,
+        )
         return Response({"order": OrderSerializer(order).data, "already_confirmed": already_confirmed})
 
 
@@ -479,6 +499,7 @@ class AccountDownloadAccessView(APIView):
         )
 
         if not grant.can_download:
+            logger.warning("Blocked download attempt for inactive grant %s (account=%s).", grant.token, account.id)
             return Response(
                 {
                     "detail": "Download grant is inactive, expired, or out of attempts.",
@@ -504,6 +525,7 @@ class AccountDownloadAccessView(APIView):
         grant.download_count += 1
         grant.last_downloaded_at = now
         grant.save(update_fields=["download_count", "last_downloaded_at", "updated_at"])
+        logger.info("Created download link for grant %s (account=%s).", grant.token, account.id)
 
         return Response(
             {
@@ -559,4 +581,11 @@ class AccountBookingListCreateView(generics.ListCreateAPIView):
         )
         # Best-effort transactional email. Booking creation remains source-of-truth.
         send_booking_requested_email(booking)
+        logger.info(
+            "Created booking %s for account %s (service_offer=%s, order_item=%s).",
+            booking.id,
+            account.id,
+            service_offer.id,
+            order_item.id if order_item else None,
+        )
         return Response(BookingSerializer(booking).data, status=201)

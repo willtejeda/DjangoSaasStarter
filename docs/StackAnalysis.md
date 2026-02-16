@@ -1,93 +1,94 @@
-# Stack Analysis: Django + React + Clerk + Supabase (+ Resend)
+# Stack Analysis and FAQ
 
-Django REST API backend, React frontend, Clerk for auth/billing, Supabase as Postgres control plane, and Resend for outbound lifecycle email.
+## Positioning
 
----
+DjangoStarter is a cashflow-first SaaS starter for Python builders.
 
-## Why This Stack Works
+It is optimized for one thing first: getting to trustworthy revenue quickly.
 
-| Choice | Why It Works |
-|---|---|
-| **Django as API + ORM** | Excellent ORM, migrations, admin panel, battle-tested ecosystem. DRF makes building APIs clean. |
-| **React frontend** | Industry standard, massive ecosystem, pairs naturally with any REST/GraphQL API. |
-| **Clerk for auth + billing** | Removes the most painful parts of SaaS (auth flows, session management, Stripe integration). Huge time saver. |
-| **Supabase as DB** | Managed Postgres with a great dashboard, built-in RLS, realtime subscriptions, and a generous free tier. |
-| **Resend for email** | Simple transactional API for order and booking lifecycle communication. |
+## Why this stack
 
----
+### Django + DRF
 
-## The Architectural Tension: Django ORM + Supabase
+- Explicit data model ownership
+- Reliable migrations
+- Fast API development
+- Strong Python ecosystem for AI workflows
 
-Two overlapping data layers exist:
+### React + Vite + Tailwind
 
-1. **Django ORM** - wants to own the schema via `backend/api/models/` + `makemigrations` + `migrate`
-2. **Supabase** - also wants to own the schema via its dashboard/migrations, and provides its own PostgREST API, auth, and RLS
+- Fast frontend iteration
+- Huge component ecosystem
+- Easy UI customization without custom CSS debt
 
-### Resolution
+### Clerk
 
-Django owns the schema. Supabase provides the managed Postgres hosting + RLS when you need per-user row isolation.
+- Auth and billing complexity offloaded
+- Production-ready account and payment surfaces
+- Webhook events for server-side truth
 
-- Django ORM handles migrations and model management → connects to Supabase Postgres via `DATABASE_URL`
-- Supabase Python client is used only for RLS-scoped queries (forwarding the Clerk JWT)
+### Supabase
 
-> [!IMPORTANT]
-> **Schema ownership must be clear.** Django runs `makemigrations` / `migrate` against Supabase Postgres. Do not create tables through the Supabase dashboard if Django needs to manage them.
+- Postgres + operator tooling + realtime capabilities
+- Better data operations surface than custom admin alone
+- Still works with Django as schema owner
 
-### Deployment posture
+### Resend
 
-A practical default for cost and control:
+- Clean transactional email API
+- Good fit for lifecycle and marketing-adjacent sends
+- Works with template workflows and tag-based observability
 
-- Self-host Django/frontend through Coolify
-- Self-host or managed-host Supabase depending budget and ops constraints
-- Keep external dependencies minimal (Clerk and Resend)
+## New user questions answered
 
----
+### Why not just use Next.js for everything?
 
-## Alternatives Considered
+If your core team is JS-heavy and wants one-language fullstack, Next.js is a great fit.
 
-| Alternative | Trade-off |
-|---|---|
-| **Drop Django, use Next.js API routes** | Simpler stack (one language), but you lose Django's ORM, admin panel, and mature ecosystem. Only makes sense if your backend is thin. |
-| **Drop Supabase, use managed Postgres directly** (Neon, Railway) | Removes the "two data layer" tension entirely. You lose Supabase's dashboard/RLS/realtime, but Django ORM replaces most of it. |
-| **Drop Django, go full Supabase** (PostgREST + Edge Functions) | Minimal backend code, but locked into Supabase's ecosystem and lose Python. |
-| **FastAPI instead of Django** | Faster async, better type hints, but you lose Django's admin, mature ORM migrations, and ecosystem breadth. |
+If your core product logic and AI workflows are Python-first, Django reduces translation overhead and keeps backend logic in the ecosystem where most AI tooling lands first.
 
----
+### Why use Django migrations if Supabase has SQL editor?
 
-## When This Stack Is the Right Call
+Because dual schema ownership creates drift and production bugs.
 
-- You want Python on the backend (mature, lots of libraries, AI/ML friendly)
-- You need a structured ORM with proper migrations (Django's is best-in-class)
-- You want to move fast on auth/billing (Clerk eliminates weeks of work)
-- You want managed Postgres without DevOps (Supabase)
-- Your frontend needs to be dynamic/interactive (React)
+Use Supabase dashboard for operations, not schema authorship of Django-managed tables.
 
----
+### Is this scalable?
 
-## Implementation Notes
+Yes, if you keep contracts strict:
 
-### Django ↔ Supabase
-- `backend/api/models/` defines schema, Django runs migrations against Supabase Postgres
-- Supabase Python client used for RLS-scoped queries only
-- Service-role key available for server-side operations that bypass RLS
+- server-side payment truth
+- migration discipline
+- observability and test gates
+- background task strategy when throughput grows
 
-### Clerk ↔ Django
-- Custom DRF authentication backend verifies Clerk JWTs via JWKS (RS256/ES256/EdDSA)
-- Supports both `Authorization: Bearer <token>` and `__session` cookie
-- Clerk Backend SDK (`clerk-backend-api`) enables server-side user lookup and metadata management
-- Svix library verifies webhook signatures
+### Is this good for non-technical creators?
 
-### Clerk ↔ React
-- Use `@clerk/clerk-react` SDK on the frontend
-- `useAuth()` hook provides JWT tokens to send to Django API
-- Clerk handles login/signup UI, session management, and billing portal
+Yes, if they use the preflight system and focus on one paid loop first.
 
-### Supabase RLS + Clerk
-- Forward Clerk JWT to Supabase PostgREST via the Python client
-- RLS policies reference `auth.jwt() ->> 'sub'` to match Clerk's `sub` claim
+This starter reduces the risky plumbing so they can focus on offer quality and distribution.
 
----
+## First dollar playbook
 
-## Verdict
+1. Launch one focused offer.
+2. Set up one paid traffic or distribution channel.
+3. Capture buyer feedback fast.
+4. Improve conversion and onboarding.
+5. Add recurring plan only after proof.
 
-> **This is a strong, production-ready stack for SaaS products.** The Django + Supabase combo requires a clear decision on schema ownership (Django), and the starter template handles this correctly. Clerk removes the hardest infrastructure problems. React is the safe frontend choice. Ship it.
+## Domain and email basics
+
+1. Buy a domain.
+2. Set DNS for app and email sender.
+3. Verify sender domain in Resend.
+4. Route support inbox with one business address.
+5. Use tagged transactional events for visibility.
+
+## What to do right after clone
+
+1. Run quickstart
+2. Pass `/app` preflight checks
+3. Create one product and one price
+4. Complete one paid checkout
+5. Verify fulfillment
+6. Only then start custom features

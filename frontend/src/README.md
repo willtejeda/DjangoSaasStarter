@@ -1,86 +1,68 @@
 # Frontend Module Layout
 
-`src/` is organized so product work can scale without turning `app.tsx` into the only source of truth.
+The frontend is designed for fast customization with minimal frontend expertise.
 
 ## Entry points
 
-- `main.tsx`: app bootstrap and providers.
-- `app.tsx`: page composition and route-level wiring.
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/main.tsx`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/app.tsx`
 
-## Shared libraries
+## Core app modules
 
-- `lib/api.ts`: API wrappers (`apiRequest`, `authedRequest`) and base URL helper.
-- `lib/signals.ts`: lightweight app-wide signals and theme state.
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/api.ts`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/lib/signals.ts`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/types.ts`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/ui-utils.ts`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/app-shell/toast.tsx`
 
-## Feature modules
+## Example-only modules
 
-- `features/app-shell/types.ts`: typed API payloads and shared view-model contracts.
-- `features/app-shell/ui-utils.ts`: shared UI classes and formatting helpers.
+Everything non-essential for production UX lives here:
+
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/examples-page.tsx`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/frontend-backend-examples.tsx`
+- `/Users/will/Code/CodexProjects/DjangoStarter/frontend/src/features/examples/signal-sandbox-example.tsx`
+
+Route: `/examples`
+
+## Key routes
+
+- `/` marketing landing surface
+- `/app` preflight and account dashboard
+- `/products` and `/products/:slug` offer flow
+- `/pricing` Clerk pricing flow
+- `/account/purchases`
+- `/account/subscriptions`
+- `/account/downloads`
+- `/account/bookings`
+- `/examples`
 
 ## Frontend to backend examples
 
-### 1. Load public pricing catalog
+### Read public offers
 
 ```ts
-import { apiRequest } from './lib/api';
-
-type Product = {
-  id: number;
-  slug: string;
-  name: string;
-  active_price?: { amount_cents: number; currency: string } | null;
-};
-
-const products = await apiRequest<Product[]>('/products/');
+const offers = await apiRequest('/products/');
 ```
 
-### 2. Create an order from a selected price
+### Create pending order
 
 ```ts
-import { authedRequest } from './lib/api';
-import { useAuth } from '@clerk/clerk-react';
-
-const { getToken } = useAuth();
-
-const payload = await authedRequest<{
-  order: { public_id: string };
-  checkout?: { checkout_url?: string | null };
-}>(getToken, '/account/orders/create/', {
+const pending = await authedRequest(getToken, '/account/orders/create/', {
   method: 'POST',
   body: { price_id: 12, quantity: 1 },
 });
-
-if (payload.checkout?.checkout_url) {
-  window.location.href = payload.checkout.checkout_url;
-}
 ```
 
-### 3. Read account subscriptions and feature flags
+### Read usage summary
 
 ```ts
-import { authedRequest } from './lib/api';
-
-const [subscriptions, billing] = await Promise.all([
-  authedRequest<Array<{ id: number; status: string; product_name?: string }>>(getToken, '/account/subscriptions/'),
-  authedRequest<{ enabled_features: string[] }>(getToken, '/billing/features/'),
-]);
-
-const hasAiFeature = billing.enabled_features.includes('ai_coach');
+const usage = await authedRequest(getToken, '/ai/usage/summary/');
 ```
 
-### 4. Read AI usage buckets for subscription UX
+## UX rules
 
-```ts
-const usage = await authedRequest<{
-  plan_tier: string;
-  buckets: Array<{ key: string; used: number; limit: number | null }>;
-}>(getToken, '/ai/usage/summary/');
-
-const tokenBucket = usage.buckets.find((b) => b.key === 'tokens');
-```
-
-## Change rules
-
-1. Add shared types and helpers under `features/` before adding more local duplicates.
-2. Keep `app.tsx` focused on composition. Extract sections once behavior starts repeating.
-3. Do not hardcode pricing data in UI. Use API payloads from `/products/` and `/seller/*` flows.
+1. Show explicit feedback for actions.
+2. Do not rely on console logs for user state awareness.
+3. Keep pricing data server-driven.
+4. Keep all optional demos in `/examples`.

@@ -5,7 +5,7 @@ export function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 const buttonBase =
-  'inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 
 export const buttonPrimary =
   `${buttonBase} bg-slate-950 text-white shadow-sm hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300`;
@@ -14,9 +14,9 @@ export const buttonSecondary =
 export const buttonGhost =
   `${buttonBase} border border-transparent bg-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`;
 export const sectionClass =
-  'rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80';
+  'rounded-3xl border border-slate-200 bg-white/90 p-7 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80 sm:p-8 lg:p-10';
 export const cardClass =
-  'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900';
+  'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900';
 
 export function formatCurrencyFromCents(cents: number, currency = 'USD'): string {
   const numeric = Number(cents || 0) / 100;

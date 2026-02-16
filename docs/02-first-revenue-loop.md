@@ -1,220 +1,105 @@
 # 02 First Revenue Loop
 
-Goal: publish one offer and complete one end-to-end purchase flow.
+Goal: prove one paid loop works end to end.
 
-This is the fastest path to prove your stack can make money.
+## Outcome to target
 
-Before and after this flow, use `/app` preflight validation to confirm integrations are healthy.
+A buyer can:
 
-## 1. Seed a published digital product and one-time price
+1. Visit offer page
+2. Start checkout
+3. Pay through Clerk
+4. Receive fulfillment (download, subscription access, or booking)
+5. See records in account pages
 
-Run this from backend:
+## Phase A: Do this before starting feature work
 
-```bash
-cd ./backend
-source .venv/bin/activate
-python3 manage.py shell <<'PY'
-from api.models import Price, Product, Profile
+Use `/app` preflight and pass all checks:
 
-owner, _ = Profile.objects.get_or_create(
-    clerk_user_id="seller_demo_owner",
-    defaults={"email": "seller@example.com", "first_name": "Demo", "last_name": "Seller"},
-)
+1. Clerk auth and profile sync
+2. Supabase bridge probe
+3. Resend test email
+4. Order placement test
+5. Webhook payment confirmation
+6. Subscription plus usage test
 
-product, _ = Product.objects.get_or_create(
-    owner=owner,
-    slug="focus-sprint-kit",
-    defaults={
-        "name": "Focus Sprint Kit",
-        "tagline": "Plan your week in 20 minutes.",
-        "description": "Templates and checklists for weekly planning and execution.",
-        "product_type": Product.ProductType.DIGITAL,
-        "visibility": Product.Visibility.PUBLISHED,
-        "feature_keys": ["focus_sprint"],
-    },
-)
+If any step fails, stop and fix infra.
 
-price, _ = Price.objects.get_or_create(
-    product=product,
-    name="Starter",
-    defaults={
-        "amount_cents": 2900,
-        "currency": "USD",
-        "billing_period": Price.BillingPeriod.ONE_TIME,
-        "is_active": True,
-        "is_default": True,
-        "metadata": {},
-    },
-)
+## Phase B: Configure your first offer in Django
 
-if not price.is_default:
-    price.is_default = True
-    price.save(update_fields=["is_default", "updated_at"])
+Use seller APIs (or admin shell) to create:
 
-if product.active_price_id != price.id:
-    product.active_price = price
-    product.save(update_fields=["active_price", "updated_at"])
+1. Product (`digital` or `service`)
+2. Price (one-time or recurring)
+3. Active price link
+4. Feature keys for entitlement gating
 
-print({"product_id": product.id, "price_id": price.id, "slug": product.slug})
-PY
-```
+Important: pricing values should come from backend payloads. Do not hardcode prices in frontend.
 
-Verify the catalog:
+## Phase C: Connect Clerk billing metadata
 
-```bash
-curl http://127.0.0.1:8000/api/products/
-```
+Map your Clerk plan or checkout to product pricing in your backend metadata flow.
 
-You should see `focus-sprint-kit` in the response.
+Checklist:
 
-## 2. Enable local manual checkout simulation
+1. Plan exists in Clerk Billing
+2. Price and period match your Django price
+3. Checkout metadata allows backend reconciliation
+4. Webhooks are configured and signed
 
-This is for local development only.
+Clerk setup order:
 
-Set in `backend/.env`:
+1. Create plan and price in Clerk Billing.
+2. Ensure plan period matches your Django `Price.billing_period`.
+3. Use Clerk pricing UI (`/pricing`) to validate plan visibility.
+4. Use signed webhook events to sync paid state into Django.
 
-```bash
-ORDER_CONFIRM_ALLOW_MANUAL=True
-```
+## Phase D: Run order placement test
 
-Set in `frontend/.env`:
+1. Open `/products`
+2. Open one offer detail
+3. Click buy to create pending order via `POST /api/account/orders/create/`
+4. Complete checkout
 
-```bash
-VITE_ENABLE_DEV_MANUAL_CHECKOUT=true
-```
+Expected result:
 
-Restart backend and frontend.
+- Order moves from `pending_payment` to `paid` or `fulfilled`
+- State transition is server-side
 
-## 3. Complete one digital purchase in UI
+## Phase E: Validate fulfillment path
 
-1. Open `http://127.0.0.1:5173/products`
-2. Sign in with Clerk
-3. Open the seeded product
-4. Click `Buy Now`
-5. You should land on `/checkout/success`
+Digital product flow:
 
-What just happened:
+1. Paid order creates download grants
+2. `/account/downloads` shows grant
+3. Access URL generation works
 
-- Frontend called `POST /api/account/orders/create/`
-- Frontend called `POST /api/account/orders/<public_id>/confirm/` with `provider=manual`
-- Backend marked order paid, fulfilled it, and created entitlements
+Subscription flow:
 
-## 4. Verify purchase data in DB
+1. Recurring plan appears in `/account/subscriptions`
+2. Entitlements are populated
+3. `/api/ai/usage/summary/` returns usage buckets
 
-```bash
-cd ./backend
-source .venv/bin/activate
-python3 manage.py shell <<'PY'
-from api.models import Entitlement, Order
+Service flow:
 
-latest = Order.objects.order_by("-created_at").prefetch_related("items").first()
-if not latest:
-    print("No orders found")
-else:
-    print({
-        "order": str(latest.public_id),
-        "status": latest.status,
-        "total_cents": latest.total_cents,
-        "items": latest.items.count(),
-    })
+1. Paid order creates booking records
+2. `/account/bookings` shows request
 
-entitlements = Entitlement.objects.order_by("-created_at")[:5]
-print("recent_entitlements", [e.feature_key for e in entitlements])
-PY
-```
+## Phase F: Verify email touchpoints
 
-If Resend is configured, this fulfillment should also trigger a transactional order confirmation email.
+1. Send preflight email from `/app`
+2. Trigger order fulfillment and booking messages
+3. Confirm recipients and sender domain are valid
 
-## 5. Seed a recurring AI subscription offer
+## Guardrails
 
-Run this from backend:
+- Production fulfillment should rely on verified Clerk webhook events
+- Keep manual confirmation flags disabled in production
+- Use Django migrations only for schema changes
 
-```bash
-cd ./backend
-source .venv/bin/activate
-python3 manage.py shell <<'PY'
-from api.models import Price, Product, Profile
+## Common first monetization playbook
 
-owner, _ = Profile.objects.get_or_create(
-    clerk_user_id="seller_demo_owner",
-    defaults={"email": "seller@example.com", "first_name": "Demo", "last_name": "Seller"},
-)
-
-product, _ = Product.objects.get_or_create(
-    owner=owner,
-    slug="agent-chat-pro",
-    defaults={
-        "name": "Agent Chat Pro",
-        "tagline": "Ship AI support with monthly usage limits.",
-        "description": "Subscription starter for token, image, and video usage products.",
-        "product_type": Product.ProductType.DIGITAL,
-        "visibility": Product.Visibility.PUBLISHED,
-        "feature_keys": ["ai_chat", "ai_images", "ai_video"],
-    },
-)
-
-price, _ = Price.objects.get_or_create(
-    product=product,
-    name="Pro Monthly",
-    defaults={
-        "amount_cents": 2900,
-        "currency": "USD",
-        "billing_period": Price.BillingPeriod.MONTHLY,
-        "is_active": True,
-        "is_default": True,
-        "metadata": {},
-    },
-)
-
-if product.active_price_id != price.id:
-    product.active_price = price
-    product.save(update_fields=["active_price", "updated_at"])
-
-print({"product_id": product.id, "price_id": price.id, "slug": product.slug})
-PY
-```
-
-## 6. Validate subscription and usage surfaces
-
-1. Go to `/products` and buy `Agent Chat Pro`
-2. Open `/account/subscriptions` and confirm record appears
-3. Open `/app` and check AI provider and usage cards
-4. Hit API directly:
-
-```bash
-curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/ai/providers/
-curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/ai/usage/summary/
-```
-
-These usage values are placeholders until you wire provider telemetry.
-
-## 7. Verify booking confirmation email flow
-
-Create a booking request from frontend (`/account/bookings`) or API:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/account/bookings/ \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service_offer": PUT_SERVICE_OFFER_ID_HERE,
-    "customer_notes": "Need onboarding help."
-  }'
-```
-
-If Resend is configured, booking creation should trigger a transactional booking confirmation email.
-
-## 8. Production safety reset
-
-Before real deployment, set these back:
-
-```bash
-# backend/.env
-ORDER_CONFIRM_ALLOW_MANUAL=False
-ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False
-
-# frontend/.env
-VITE_ENABLE_DEV_MANUAL_CHECKOUT=false
-```
-
-Production should rely on verified Clerk webhooks for payment confirmation.
+1. Sell one small digital offer first ($29 to $99)
+2. Add recurring plan after initial demand proof
+3. Bundle support or service upsell
+4. Improve onboarding before adding complex features

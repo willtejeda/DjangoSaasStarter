@@ -270,3 +270,34 @@ SECURE_REFERRER_POLICY = config(
     default="strict-origin-when-cross-origin",
 )
 X_FRAME_OPTIONS = config("DJANGO_X_FRAME_OPTIONS", default="DENY")
+
+# Logging defaults prioritize clear operational visibility without exposing secrets.
+DJANGO_LOG_LEVEL = config("DJANGO_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO").upper()
+API_LOG_LEVEL = config("API_LOG_LEVEL", default=DJANGO_LOG_LEVEL).upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": DJANGO_LOG_LEVEL,
+    },
+    "loggers": {
+        "api": {
+            "handlers": ["console"],
+            "level": API_LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}

@@ -42,6 +42,8 @@ Frontend:
 - `frontend/src/lib/api.ts`: API wrappers for all server interaction
 - `frontend/src/features/app-shell/types.ts`: shared payload types
 - `frontend/src/features/app-shell/ui-utils.ts`: shared UI helpers
+- `frontend/src/features/app-shell/toast.tsx`: user feedback notifications
+- `frontend/src/features/examples/`: non-essential demos and reference snippets
 - `frontend/src/app.tsx`: page composition and integration wiring
 
 ## Non Negotiables
@@ -80,6 +82,8 @@ Before implementing major features, define these from the user point of view:
 1. Who pays and why now?
 2. What exact outcome is promised in 7 days?
 3. What does the first checkout unlock immediately?
+
+When in doubt, ask and answer beginner-facing questions explicitly in docs and UI copy.
 
 Then execute in this order:
 
@@ -220,6 +224,16 @@ UI should be utility-first Tailwind in component code.
 - Avoid adding custom stylesheet systems that require end users to hand-write CSS.
 - Keep layouts mobile-friendly and conversion-focused.
 
+## Agent Runtime Guardrails (for future widget work)
+
+If you add an embedded coding-agent runtime later:
+
+1. Keep runtime disabled in production by default.
+2. Require explicit env gate in addition to debug mode.
+3. Run tool actions server-side, never directly from browser secrets.
+4. Persist agent messages server-side for shareable progress logs.
+5. Keep widget module deletable without breaking core commerce flow.
+
 ## Skill Authoring Rules
 
 When building project-specific skills for agents:
@@ -310,3 +324,5 @@ Start here:
 - `docs/05-customize-template.md`
 - `docs/06-resend-transactional-email.md`
 - `docs/07-agent-skills-playbook.md`
+- `docs/08-security-pass-phase-1.md`
+- `docs/09-agent-frameworks-2026.md`

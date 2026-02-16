@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
+from django.conf import settings
 from django.db.models import Q, Sum
 from django.utils import timezone as django_timezone
 from rest_framework import generics
@@ -28,6 +30,8 @@ from .helpers import (
     get_request_profile,
     sync_profile_from_claims,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class HealthView(APIView):
@@ -188,6 +192,7 @@ class SupabaseProfileView(APIView):
             return Response({"ok": False, "detail": "Missing Clerk user id in token claims."}, status=400)
 
         try:
+            logger.debug("Running Supabase profile probe for user %s.", clerk_user_id)
             supabase = get_supabase_client(access_token=getattr(request, "clerk_token", None))
             result = (
                 supabase.table("profiles")
@@ -197,19 +202,21 @@ class SupabaseProfileView(APIView):
                 .execute()
             )
         except SupabaseConfigurationError as exc:
+            logger.warning("Supabase probe failed due to configuration: %s", exc)
             return Response(
                 {
                     "ok": False,
                     "detail": "Supabase probe failed. Check SUPABASE_URL and API keys.",
-                    "error": str(exc),
+                    **({"error": str(exc)} if settings.DEBUG else {}),
                 }
             )
         except Exception as exc:  # pragma: no cover
+            logger.exception("Unexpected error during Supabase profile probe for user %s.", clerk_user_id)
             return Response(
                 {
                     "ok": False,
                     "detail": "Supabase probe failed. Confirm table and RLS setup.",
-                    "error": str(exc),
+                    **({"error": str(exc)} if settings.DEBUG else {}),
                 }
             )
 
@@ -244,10 +251,15 @@ class ClerkUserView(APIView):
 
             user = get_clerk_user(clerk_user_id)
         except ClerkClientError as exc:
+            logger.warning("Clerk user fetch failed for %s: %s", clerk_user_id, exc)
             return Response({"detail": str(exc)}, status=500)
         except Exception as exc:
+            logger.exception("Unexpected Clerk API error for %s.", clerk_user_id)
             return Response(
-                {"detail": "Clerk API call failed.", "error": str(exc)},
+                {
+                    "detail": "Clerk API call failed.",
+                    **({"error": str(exc)} if settings.DEBUG else {}),
+                },
                 status=502,
             )
 
@@ -269,7 +281,6 @@ class ClerkUserView(APIView):
                 "image_url": getattr(user, "image_url", None),
                 "email_addresses": email_addresses,
                 "public_metadata": getattr(user, "public_metadata", {}),
-                "private_metadata": getattr(user, "private_metadata", {}),
                 "created_at": getattr(user, "created_at", None),
                 "last_sign_in_at": getattr(user, "last_sign_in_at", None),
             }

@@ -163,7 +163,6 @@ export interface HeaderProps {
   pathname: string;
   onNavigate: NavigateFn;
   signedIn: boolean;
-  expandedNav: boolean;
   themeLabel: string;
   onToggleTheme: () => void;
 }
