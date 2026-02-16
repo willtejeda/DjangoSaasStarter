@@ -96,6 +96,32 @@ cd backend && ./start.sh
 cd frontend && ./start.sh
 ```
 
+### 4) Docker Images (Backend and Frontend)
+
+Build backend image:
+
+```bash
+docker build -t djangostarter-backend ./backend
+```
+
+Run backend image:
+
+```bash
+docker run --rm -p 8000:8000 --env-file ./backend/.env djangostarter-backend
+```
+
+Build frontend image:
+
+```bash
+docker build -t djangostarter-frontend ./frontend
+```
+
+Run frontend image:
+
+```bash
+docker run --rm -p 5173:80 djangostarter-frontend
+```
+
 ## Environment Variables
 
 ### Backend (`backend/.env`)

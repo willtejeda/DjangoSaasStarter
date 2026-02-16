@@ -16,20 +16,29 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
-bash "$ROOT_DIR/backend/start.sh" &
-BACKEND_PID=$!
+if [ "${START_SKIP_BACKEND:-false}" != "true" ]; then
+  bash "$ROOT_DIR/backend/start.sh" &
+  BACKEND_PID=$!
+fi
 
-bash "$ROOT_DIR/frontend/start.sh" &
-FRONTEND_PID=$!
+if [ "${START_SKIP_FRONTEND:-false}" != "true" ]; then
+  bash "$ROOT_DIR/frontend/start.sh" &
+  FRONTEND_PID=$!
+fi
+
+if [ -z "${BACKEND_PID:-}" ] && [ -z "${FRONTEND_PID:-}" ]; then
+  echo "Nothing to start. Set START_SKIP_BACKEND/START_SKIP_FRONTEND to false."
+  exit 1
+fi
 
 EXIT_CODE=0
 while true; do
-  if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+  if [ -n "${BACKEND_PID:-}" ] && ! kill -0 "$BACKEND_PID" 2>/dev/null; then
     wait "$BACKEND_PID" || EXIT_CODE=$?
     break
   fi
 
-  if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+  if [ -n "${FRONTEND_PID:-}" ] && ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
     wait "$FRONTEND_PID" || EXIT_CODE=$?
     break
   fi

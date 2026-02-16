@@ -9,5 +9,8 @@ if [ -d ".venv" ]; then
   source ".venv/bin/activate"
 fi
 
-python3 manage.py migrate
-exec python3 manage.py runserver 0.0.0.0:${BACKEND_PORT:-8000}
+if [ "${BACKEND_RUN_MIGRATIONS:-true}" = "true" ]; then
+  python3 manage.py migrate
+fi
+
+exec python3 manage.py runserver "${BACKEND_HOST:-0.0.0.0}:${BACKEND_PORT:-8000}"
