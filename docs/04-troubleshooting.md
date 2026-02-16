@@ -1,6 +1,6 @@
 # 04 Troubleshooting
 
-Use this when something looks broken locally.
+Use this when local behavior does not match expected checkout or account flows.
 
 ## Frontend says "Missing Clerk config"
 
@@ -29,12 +29,33 @@ Fix:
 2. Get a fresh token:
 
 ```js
-await window.Clerk.session.getToken()
+await window.Clerk?.session?.getToken?.()
 ```
 
 3. Retry request with `Authorization: Bearer <token>`.
 
-## Manual confirm request returns `403`
+## Buy button shows "Checkout URL missing"
+
+Problem:
+
+- `price.metadata.checkout_url` is empty
+- `VITE_ENABLE_DEV_MANUAL_CHECKOUT` is false
+
+Fix options:
+
+1. Add a real Clerk checkout URL to the price metadata.
+2. For local simulation only, set `VITE_ENABLE_DEV_MANUAL_CHECKOUT=true` and `ORDER_CONFIRM_ALLOW_MANUAL=True`.
+
+Example metadata patch:
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/seller/prices/PUT_PRICE_ID_HERE/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"metadata":{"checkout_url":"https://checkout.clerk.com/..."}}'
+```
+
+## Manual confirm returns `403`
 
 Problem:
 
@@ -49,7 +70,7 @@ ORDER_CONFIRM_ALLOW_MANUAL=True
 
 Restart backend.
 
-## Clerk confirm request returns `409 pending_verification`
+## Clerk direct confirm returns `409 pending_verification`
 
 Problem:
 
@@ -65,31 +86,45 @@ Fix:
 Problem:
 
 - Product is not published
+- No active price exists
 
 Fix:
 
 - Set `visibility` to `published`
 - Make sure at least one active price exists
 
-Quick check in shell:
+Quick check:
 
 ```bash
 cd ./backend
 source .venv/bin/activate
-python3 manage.py shell -c "from api.models import Product; print(list(Product.objects.values('id','slug','visibility')))"
+python3 manage.py shell -c "from api.models import Product; print(list(Product.objects.values('id','slug','visibility','active_price_id')))"
 ```
 
-## Download URL request fails
+## Download access fails with `503`
 
 Problem:
 
-- Asset storage is not configured, or grant has no attempts left
+- Asset storage backend config is incomplete
 
 Fix:
 
-- Verify storage env vars in `backend/.env`
-- Verify `ASSET_STORAGE_BACKEND`, bucket, and credentials
-- Check grant state in `/api/account/downloads/`
+- Verify `ASSET_STORAGE_BACKEND`
+- For `supabase`, verify `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and bucket
+- For `s3`, verify endpoint, access key, secret key, and bucket
+
+Relevant vars live in `backend/.env.example`.
+
+## Download URL request fails with `403`
+
+Problem:
+
+- Download grant is expired, inactive, or out of attempts
+
+Fix:
+
+- Check `/api/account/downloads/` for `can_download`, `expires_at`, and `download_count`
+- Issue a new fulfilled order or reset grant limits for testing
 
 ## Clerk webhook events are ignored or failing
 
@@ -99,7 +134,7 @@ Problem:
 
 Fix:
 
-- Clerk webhook URL must be `/api/webhooks/clerk/`
+- Webhook URL must be `/api/webhooks/clerk/`
 - `CLERK_WEBHOOK_SIGNING_SECRET` must match Clerk dashboard value
 - Confirm your public URL resolves to this backend
 
@@ -120,7 +155,7 @@ CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 Restart backend.
 
-## Deployment safety check fails
+## Deploy check fails
 
 Problem:
 

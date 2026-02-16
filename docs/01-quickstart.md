@@ -7,6 +7,7 @@ Goal: run the app locally and confirm the stack is healthy.
 - Python 3.11+
 - Node.js 20+
 - npm
+- Docker (optional)
 
 ## 2. Backend setup
 
@@ -20,7 +21,7 @@ python3 manage.py migrate
 python3 manage.py runserver
 ```
 
-Backend will run on `http://127.0.0.1:8000`.
+Backend URL: `http://127.0.0.1:8000`
 
 ## 3. Frontend setup
 
@@ -33,9 +34,9 @@ npm install
 npm run dev
 ```
 
-Frontend will run on `http://127.0.0.1:5173`.
+Frontend URL: `http://127.0.0.1:5173`
 
-## 4. Required env values to verify first
+## 4. Minimum env values to set first
 
 `frontend/.env`
 
@@ -52,9 +53,12 @@ DJANGO_DEBUG=True
 CLERK_SECRET_KEY=sk_test_xxx
 CLERK_DOMAIN=your-domain.clerk.accounts.dev
 CLERK_WEBHOOK_SIGNING_SECRET=whsec_xxx
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=eyXXXX
+ASSET_STORAGE_BUCKET=digital-assets
 ```
 
-You can leave many other vars at defaults for local development.
+You can keep the remaining values from `.env.example` while bootstrapping locally.
 
 ## 5. Health checks
 
@@ -62,10 +66,10 @@ You can leave many other vars at defaults for local development.
 curl http://127.0.0.1:8000/api/health/
 ```
 
-Expected shape:
+Expected keys:
 
 ```json
-{"status":"ok","timestamp":"2026-02-16T00:00:00+00:00"}
+{"status":"ok","timestamp":"<iso8601>"}
 ```
 
 ```bash
@@ -78,20 +82,52 @@ Expected on a fresh DB:
 []
 ```
 
-Open `http://127.0.0.1:5173` and verify the marketing homepage loads.
+Open `http://127.0.0.1:5173` and verify the homepage renders.
 
-## 6. One-command local start (optional)
+## 6. Start script options
 
 From repo root:
 
 ```bash
-cd .
 ./start.sh
 ```
 
-This starts backend and frontend together.
+Backend only:
 
-## 7. Quality checks before commit
+```bash
+./backend/start.sh
+```
+
+Frontend only:
+
+```bash
+./frontend/start.sh
+```
+
+Useful flags:
+
+- `START_SKIP_BACKEND=true` to skip backend in root starter
+- `START_SKIP_FRONTEND=true` to skip frontend in root starter
+- `BACKEND_RUN_MIGRATIONS=false` to skip migrations on backend script start
+- `FRONTEND_TYPECHECK_ON_START=false` to skip typecheck on frontend script start
+
+## 7. Optional Docker quick run
+
+Build and run backend image:
+
+```bash
+docker build -t djangostarter-backend ./backend
+docker run --rm -p 8000:8000 --env-file ./backend/.env djangostarter-backend
+```
+
+Build and run frontend image:
+
+```bash
+docker build -t djangostarter-frontend ./frontend
+docker run --rm -p 5173:80 djangostarter-frontend
+```
+
+## 8. Quality checks before commit
 
 ```bash
 cd ./backend

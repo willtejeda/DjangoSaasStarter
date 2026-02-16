@@ -1,25 +1,34 @@
 # DjangoStarter Docs
 
-This folder is the practical guide for developers using this template.
+Use this folder as the operator manual for shipping a paid MVP from this template.
 
-If you are new, read in this order:
+Read these docs in order:
 
 1. `01-quickstart.md`
 2. `02-first-revenue-loop.md`
 3. `03-api-cheatsheet.md`
 4. `04-troubleshooting.md`
 5. `05-customize-template.md`
+6. `StackAnalysis.md` for architecture context and tradeoffs
 
-## What you will learn
+## What this covers
 
-- Run backend and frontend locally
-- Publish your first product
-- Test checkout and fulfillment paths
-- Use seller and account APIs with copy-paste commands
-- Customize the template into your own SaaS
+- Local backend and frontend setup
+- Product, pricing, checkout, and fulfillment flow
+- API endpoints for buyer and seller operations
+- Common failure modes and fast fixes
+- A repeatable sequence for converting the template into your SaaS
 
-## Who this is for
+## Fast links
 
-- Solo founders shipping a paid MVP
-- Product engineers building a monetized prototype
-- Teams using coding agents to move from template to launch
+- Root guide: `README.md`
+- Backend env reference: `backend/.env.example`
+- Frontend env reference: `frontend/.env.example`
+- Deployment checks: `.github/workflows/ci.yml`
+
+## Non negotiable production rules
+
+- Keep `DJANGO_DEBUG=False`
+- Keep `ORDER_CONFIRM_ALLOW_MANUAL=False`
+- Keep `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False`
+- Confirm payments from verified Clerk webhooks only

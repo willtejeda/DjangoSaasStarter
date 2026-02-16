@@ -2,6 +2,17 @@
 
 Production-minded starter for selling digital products and services.
 
+## Documentation Map
+
+Read these docs in order:
+
+1. `docs/01-quickstart.md`
+2. `docs/02-first-revenue-loop.md`
+3. `docs/03-api-cheatsheet.md`
+4. `docs/04-troubleshooting.md`
+5. `docs/05-customize-template.md`
+6. `docs/StackAnalysis.md`
+
 ## Why This Stack
 
 This stack is opinionated on purpose.
@@ -95,6 +106,13 @@ Frontend runs on `http://127.0.0.1:5173`.
 cd backend && ./start.sh
 cd frontend && ./start.sh
 ```
+
+Useful flags:
+
+- `START_SKIP_BACKEND=true`
+- `START_SKIP_FRONTEND=true`
+- `BACKEND_RUN_MIGRATIONS=false`
+- `FRONTEND_TYPECHECK_ON_START=false`
 
 ### 4) Docker Images (Backend and Frontend)
 
@@ -289,6 +307,8 @@ Webhook handlers try multiple fields, but `order_public_id` is the most reliable
 - Direct client-side order confirmation is disabled by default.
 - Manual confirmation is disabled by default.
 - If you must enable direct confirmation for development, gate it with `ORDER_CONFIRM_SHARED_SECRET` and never expose that secret in frontend code.
+- In production keep `ORDER_CONFIRM_ALLOW_MANUAL=False`.
+- In production keep `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False`.
 
 ## Commerce Model Map
 
@@ -386,7 +406,10 @@ curl -X POST http://127.0.0.1:8000/api/seller/products/<product_id>/prices/ \
     "billing_period": "monthly",
     "is_default": true,
     "clerk_plan_id": "plan_xxx",
-    "clerk_price_id": "price_xxx"
+    "clerk_price_id": "price_xxx",
+    "metadata": {
+      "checkout_url": "https://checkout.clerk.com/..."
+    }
   }'
 ```
 
@@ -424,6 +447,18 @@ If your default DB points at remote Postgres, run tests with local SQLite:
 
 ```bash
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
+```
+
+Deploy checks from `backend/`:
+
+```bash
+DJANGO_DEBUG=False DJANGO_SECRET_KEY='replace-with-a-64-char-random-secret-key-value-example-1234567890' python3 manage.py check --deploy
+```
+
+Frontend production build from `frontend/`:
+
+```bash
+npm run build
 ```
 
 ## Deployment Notes
