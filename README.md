@@ -1,102 +1,142 @@
-# Django + Supabase + Clerk Starter
+# Django + Supabase + Clerk + Preact SaaS Starter
 
-Django REST API template with Clerk auth/billing and Supabase Postgres.
+Production-minded SaaS starter with:
+- Django for ORM and REST API
+- Supabase for managed Postgres and optional RLS client access
+- Clerk for auth, sessions, webhooks, and billing entitlements
+- Preact + Vite frontend for fast UI iteration
+
+## Architecture
+
+Django owns schema and migrations. Supabase provides the Postgres infrastructure and optional PostgREST access for RLS-aware queries. Clerk handles auth and billing features, and Django verifies Clerk JWTs through JWKS.
+
+## Repository Layout
+
+```text
+backend/
+  manage.py
+  requirements.txt
+  .env.example
+  project_settings/
+  api/
+frontend/
+  package.json
+  .env.example
+  vite.config.js
+  src/
+```
 
 ## Quick Start
 
+### 1) Backend
+
 ```bash
-cd app
-python3 -m venv .venv && source .venv/bin/activate
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # ← edit with your credentials
+cp .env.example .env
 python3 manage.py migrate
 python3 manage.py runserver
 ```
 
+Backend runs on `http://127.0.0.1:8000`.
+
+### 2) Frontend
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Frontend runs on `http://127.0.0.1:5173`.
+
 ## Environment Variables
+
+### Backend (`backend/.env`)
 
 | Variable | Required | Description |
 |---|---|---|
-| `DJANGO_SECRET_KEY` | ✅ | Change before production |
-| `DJANGO_DEBUG` | — | `True` for dev (default) |
-| `DJANGO_ALLOWED_HOSTS` | — | Comma-separated (default: `localhost,127.0.0.1`) |
-| `DB_NAME` | — | Database name (default: `postgres`) |
-| `DB_USER` | — | Database user (default: `postgres`) |
-| `DB_PASSWORD` | — | Database password |
-| `DB_HOST` | — | **Use Supabase Pooler URL** (e.g. `aws-0...pooler.supabase.com`) |
-| `DB_PORT` | — | Database port (default: `5432`) |
-| `CORS_ALLOWED_ORIGINS` | — | Comma-separated frontend origins |
-| `CSRF_TRUSTED_ORIGINS` | — | Comma-separated trusted origins |
-| `CLERK_SECRET_KEY` | ✅ | [Dashboard → API Keys](https://dashboard.clerk.com) |
-| `CLERK_DOMAIN` | ✅ | e.g. `abc-123.clerk.accounts.dev` |
-| `CLERK_JWKS_URL` | — | Auto-derived from `CLERK_DOMAIN` |
-| `CLERK_JWT_ISSUER` | — | Auto-derived from `CLERK_DOMAIN` |
-| `CLERK_JWT_AUDIENCE` | — | Audience claim (leave empty to skip) |
-| `CLERK_AUTHORIZED_PARTIES` | — | Comma-separated allowed `azp` values |
-| `CLERK_BILLING_CLAIM` | — | JWT claim for billing (default: `entitlements`) |
-| `CLERK_WEBHOOK_SIGNING_SECRET` | — | [Dashboard → Webhooks](https://dashboard.clerk.com) |
-| `SUPABASE_URL` | ✅ | e.g. `https://xxx.supabase.co` |
-| `SUPABASE_ANON_KEY` | ✅ | Supabase anon/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Bypasses RLS — server-side only |
+| `DJANGO_SECRET_KEY` | Yes | Django secret key |
+| `DJANGO_DEBUG` | No | `True` for local development |
+| `DJANGO_ALLOWED_HOSTS` | No | Comma-separated hosts |
+| `DATABASE_URL` | No | Optional DB URL (`postgresql://...` or `sqlite:///...`) |
+| `DB_NAME` | No | Used when `DATABASE_URL` is not set |
+| `DB_USER` | No | Used when `DATABASE_URL` is not set |
+| `DB_PASSWORD` | No | Used when `DATABASE_URL` is not set |
+| `DB_HOST` | No | Supabase pooler host |
+| `DB_PORT` | No | Default `5432` |
+| `CORS_ALLOWED_ORIGINS` | No | Include frontend origin (`http://localhost:5173`) |
+| `CSRF_TRUSTED_ORIGINS` | No | Include frontend origin (`http://localhost:5173`) |
+| `CLERK_SECRET_KEY` | Yes | Clerk backend secret key |
+| `CLERK_DOMAIN` | Yes | Clerk instance domain |
+| `CLERK_JWKS_URL` | No | Defaults from `CLERK_DOMAIN` |
+| `CLERK_JWT_ISSUER` | No | Defaults from `CLERK_DOMAIN` |
+| `CLERK_JWT_AUDIENCE` | No | Optional JWT audience |
+| `CLERK_AUTHORIZED_PARTIES` | No | Optional allowed `azp` values |
+| `CLERK_BILLING_CLAIM` | No | Entitlements claim key (default: `entitlements`) |
+| `CLERK_WEBHOOK_SIGNING_SECRET` | Yes | Svix signing secret |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Yes | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only key, bypasses RLS |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `VITE_CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key |
+| `VITE_API_BASE_URL` | Yes | Django API base URL, default `http://127.0.0.1:8000/api` |
+| `VITE_CLERK_BILLING_PORTAL_URL` | No | Optional billing portal or pricing URL |
 
 ## API Endpoints
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/health/` | Public | Health check |
-| `GET` | `/api/me/` | 🔒 | User from JWT claims |
-| `GET` | `/api/me/clerk/` | 🔒 | Full Clerk profile (server-side) |
-| `GET` | `/api/billing/features/` | 🔒 | Enabled billing features |
-| `GET` | `/api/billing/features/?feature=pro` | 🔒 | Check one feature |
-| `GET` | `/api/supabase/profile/` | 🔒 | Profile from `profiles` table |
+| `GET` | `/api/me/` | Required | JWT claims and synced profile |
+| `GET` | `/api/profile/` | Required | Current user profile model |
+| `GET` | `/api/me/clerk/` | Required | Full Clerk user from backend SDK |
+| `GET` | `/api/billing/features/` | Required | Enabled features list |
+| `GET` | `/api/billing/features/?feature=pro` | Required | Single feature check |
+| `GET` | `/api/projects/` | Required | List current user projects |
+| `POST` | `/api/projects/` | Required | Create project |
+| `GET` | `/api/projects/<id>/` | Required | Get project |
+| `PATCH` | `/api/projects/<id>/` | Required | Update project |
+| `DELETE` | `/api/projects/<id>/` | Required | Delete project |
+| `GET` | `/api/supabase/profile/` | Required | Read `profiles` table via Supabase client |
 | `POST` | `/api/webhooks/clerk/` | Svix | Clerk webhook receiver |
 
-## Authentication
+## Authentication Flow
 
-Protected endpoints accept:
-- `Authorization: Bearer <clerk-jwt>` header
+Protected endpoints support:
+- `Authorization: Bearer <clerk-jwt>`
 - Clerk `__session` cookie
 
-JWTs verified against Clerk JWKS using RS256/ES256/EdDSA.
+Django verifies tokens against Clerk JWKS with supported asymmetric algorithms.
+
+## Billing and Entitlements
+
+Billing access is inferred from Clerk JWT claims. The backend reads `CLERK_BILLING_CLAIM` (default `entitlements`) and exposes feature checks through `/api/billing/features/`.
 
 ## Webhooks
 
-1. [Clerk Dashboard → Webhooks](https://dashboard.clerk.com) → Create endpoint
-2. URL: `https://your-domain.com/api/webhooks/clerk/`
-3. Copy Signing Secret → `CLERK_WEBHOOK_SIGNING_SECRET` in `.env`
+1. Create endpoint in Clerk Dashboard -> Webhooks
+2. Set endpoint URL to `https://your-domain.com/api/webhooks/clerk/`
+3. Copy signing secret into `CLERK_WEBHOOK_SIGNING_SECRET`
 
-Add your logic in `api/webhooks.py`:
+Current handlers sync Clerk user lifecycle into the Django `Profile` model:
+- `user.created`
+- `user.updated`
+- `user.deleted`
+- `session.created`
 
-```python
-def handle_user_created(data):
-    clerk_user_id = data.get("id")
-    # Create Supabase profile, send welcome email, etc.
-```
+## Supabase Usage
 
-## Clerk Backend SDK
-
-```python
-from api.clerk_client import get_clerk_client, get_clerk_user
-
-user = get_clerk_user("user_2abc...")
-
-client = get_clerk_client()
-client.users.update_metadata(user_id="user_2abc...", ...)
-```
-
-## Supabase
-
-Forwards Clerk JWT to PostgREST for Row Level Security:
-
-```python
-from api.supabase_client import get_supabase_client
-
-# User-scoped (respects RLS)
-client = get_supabase_client(access_token=request.clerk_token)
-
-# Service-role (bypasses RLS)
-client = get_supabase_client(use_service_role=True)
-```
+`backend/api/supabase_client.py` supports two modes:
+- User-scoped client with forwarded Clerk JWT (`access_token=...`) for RLS
+- Service-role client (`use_service_role=True`) for trusted server operations
 
 Example RLS policy:
 
@@ -108,43 +148,27 @@ ON profiles FOR SELECT
 USING (clerk_user_id = auth.jwt() ->> 'sub');
 ```
 
-## Project Structure
+## Run Tests
 
-```
-app/
-├── manage.py
-├── requirements.txt
-├── .env.example
-├── project_settings/
-│   ├── settings.py
-│   ├── urls.py
-│   ├── wsgi.py / asgi.py
-├── api/
-│   ├── authentication.py     # DRF auth backend (JWT verification)
-│   ├── clerk.py              # JWKS token decode
-│   ├── clerk_client.py       # Backend SDK client
-│   ├── middleware.py          # Optional request enrichment
-│   ├── supabase_client.py    # Supabase client + RLS forwarding
-│   ├── views.py              # API views
-│   ├── webhooks.py           # Webhook receiver
-│   ├── urls.py
-│   ├── models.py
-│   └── tests.py
-```
-
-## Tests
+From `backend/`:
 
 ```bash
 python3 manage.py test api -v2
 ```
 
+If your default DB points at a shared remote Postgres, run tests with local SQLite override:
+
+```bash
+DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2
+```
+
 ## Production Checklist
 
-- [ ] `DJANGO_DEBUG=False`
-- [ ] Strong `DJANGO_SECRET_KEY`
-- [ ] Restrict `DJANGO_ALLOWED_HOSTS`
-- [ ] Explicit `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS`
-- [ ] HTTPS only
-- [ ] Real `CLERK_SECRET_KEY` and `CLERK_WEBHOOK_SIGNING_SECRET`
-- [ ] Configure all `SUPABASE_*` keys
-- [ ] RLS policies on all Supabase tables
+- Set `DJANGO_DEBUG=False`
+- Use strong `DJANGO_SECRET_KEY`
+- Restrict `DJANGO_ALLOWED_HOSTS`
+- Set explicit `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS`
+- Enforce HTTPS
+- Use real Clerk and Supabase credentials
+- Configure webhook signing secret
+- Add and validate RLS policies for Supabase tables

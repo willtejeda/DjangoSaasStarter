@@ -4,10 +4,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from django.conf import settings
+from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Profile, Project
+from .serializers import ProfileSerializer, ProjectSerializer
 from .supabase_client import SupabaseConfigurationError, get_supabase_client
 
 
@@ -27,6 +31,61 @@ def extract_billing_features(claims: dict[str, Any]) -> list[str]:
     return []
 
 
+def infer_plan_tier(features: list[str]) -> str:
+    normalized = {feature.lower() for feature in features}
+    if "enterprise" in normalized:
+        return Profile.PlanTier.ENTERPRISE
+    if {"pro", "premium", "growth"} & normalized:
+        return Profile.PlanTier.PRO
+    return Profile.PlanTier.FREE
+
+
+def _safe_str(value: Any) -> str:
+    return str(value).strip() if value else ""
+
+
+def sync_profile_from_claims(claims: dict[str, Any]) -> Profile | None:
+    clerk_user_id = _safe_str(claims.get("sub"))
+    if not clerk_user_id:
+        return None
+
+    billing_features = extract_billing_features(claims)
+    metadata = claims.get("metadata") if isinstance(claims.get("metadata"), dict) else {}
+    defaults = {
+        "email": _safe_str(claims.get("email")),
+        "first_name": _safe_str(claims.get("given_name") or claims.get("first_name")),
+        "last_name": _safe_str(claims.get("family_name") or claims.get("last_name")),
+        "image_url": _safe_str(claims.get("picture") or claims.get("image_url")),
+        "plan_tier": infer_plan_tier(billing_features),
+        "billing_features": billing_features,
+        "is_active": True,
+        "metadata": metadata,
+    }
+    profile, _ = Profile.objects.update_or_create(
+        clerk_user_id=clerk_user_id,
+        defaults=defaults,
+    )
+    return profile
+
+
+def get_request_claims(request) -> dict[str, Any]:
+    claims = getattr(request, "clerk_claims", request.auth or {})
+    return claims if isinstance(claims, dict) else {}
+
+
+def get_request_profile(request) -> Profile:
+    cached_profile = getattr(request, "_cached_profile", None)
+    if cached_profile is not None:
+        return cached_profile
+
+    profile = sync_profile_from_claims(get_request_claims(request))
+    if profile is None:
+        raise ValidationError("Missing Clerk identity in token claims.")
+
+    request._cached_profile = profile
+    return profile
+
+
 class HealthView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -44,8 +103,9 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        claims = getattr(request, "clerk_claims", request.auth or {})
+        claims = get_request_claims(request)
         billing_features = extract_billing_features(claims)
+        profile = sync_profile_from_claims(claims)
 
         return Response(
             {
@@ -53,6 +113,7 @@ class MeView(APIView):
                 "email": claims.get("email"),
                 "org_id": claims.get("org_id"),
                 "billing_features": billing_features,
+                "profile": ProfileSerializer(profile).data if profile else None,
             }
         )
 
@@ -61,7 +122,7 @@ class BillingFeatureView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        claims = getattr(request, "clerk_claims", request.auth or {})
+        claims = get_request_claims(request)
         enabled_features = set(extract_billing_features(claims))
         requested_feature = request.query_params.get("feature")
 
@@ -80,7 +141,7 @@ class SupabaseProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        claims = getattr(request, "clerk_claims", request.auth or {})
+        claims = get_request_claims(request)
         clerk_user_id = claims.get("sub")
         if not clerk_user_id:
             return Response({"detail": "Missing Clerk user id in token claims."}, status=400)
@@ -121,7 +182,7 @@ class ClerkUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        claims = getattr(request, "clerk_claims", request.auth or {})
+        claims = get_request_claims(request)
         clerk_user_id = claims.get("sub")
         if not clerk_user_id:
             return Response(
@@ -165,3 +226,32 @@ class ClerkUserView(APIView):
             }
         )
 
+
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = get_request_profile(request)
+        return Response(ProfileSerializer(profile).data)
+
+
+class ProjectListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProjectSerializer
+
+    def get_queryset(self):
+        profile = get_request_profile(self.request)
+        return Project.objects.filter(owner=profile)
+
+    def perform_create(self, serializer):
+        profile = get_request_profile(self.request)
+        serializer.save(owner=profile)
+
+
+class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProjectSerializer
+
+    def get_queryset(self):
+        profile = get_request_profile(self.request)
+        return Project.objects.filter(owner=profile)
