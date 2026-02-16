@@ -1,6 +1,6 @@
-# Stack Analysis: Django + React + Clerk + Supabase
+# Stack Analysis: Django + React + Clerk + Supabase (+ Resend)
 
-Django REST API backend, React frontend, Clerk for auth/billing, Supabase as managed Postgres.
+Django REST API backend, React frontend, Clerk for auth/billing, Supabase as Postgres control plane, and Resend for outbound lifecycle email.
 
 ---
 
@@ -12,6 +12,7 @@ Django REST API backend, React frontend, Clerk for auth/billing, Supabase as man
 | **React frontend** | Industry standard, massive ecosystem, pairs naturally with any REST/GraphQL API. |
 | **Clerk for auth + billing** | Removes the most painful parts of SaaS (auth flows, session management, Stripe integration). Huge time saver. |
 | **Supabase as DB** | Managed Postgres with a great dashboard, built-in RLS, realtime subscriptions, and a generous free tier. |
+| **Resend for email** | Simple transactional API for order and booking lifecycle communication. |
 
 ---
 
@@ -19,8 +20,8 @@ Django REST API backend, React frontend, Clerk for auth/billing, Supabase as man
 
 Two overlapping data layers exist:
 
-1. **Django ORM** — wants to own the schema via `models.py` + `makemigrations` + `migrate`
-2. **Supabase** — also wants to own the schema via its dashboard/migrations, and provides its own PostgREST API, auth, and RLS
+1. **Django ORM** - wants to own the schema via `models.py` + `makemigrations` + `migrate`
+2. **Supabase** - also wants to own the schema via its dashboard/migrations, and provides its own PostgREST API, auth, and RLS
 
 ### Resolution
 
@@ -31,6 +32,14 @@ Django owns the schema. Supabase provides the managed Postgres hosting + RLS whe
 
 > [!IMPORTANT]
 > **Schema ownership must be clear.** Django runs `makemigrations` / `migrate` against Supabase Postgres. Do not create tables through the Supabase dashboard if Django needs to manage them.
+
+### Deployment posture
+
+A practical default for cost and control:
+
+- Self-host Django/frontend through Coolify
+- Self-host or managed-host Supabase depending budget and ops constraints
+- Keep external dependencies minimal (Clerk and Resend)
 
 ---
 

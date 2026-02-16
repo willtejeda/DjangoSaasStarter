@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AiProviderListView,
+    AiUsageSummaryView,
     AccountBookingListCreateView,
     AccountCustomerView,
     AccountDownloadAccessView,
@@ -36,6 +38,8 @@ urlpatterns = [
     path("profile/", ProfileView.as_view(), name="profile"),
     path("me/clerk/", ClerkUserView.as_view(), name="clerk-user"),
     path("billing/features/", BillingFeatureView.as_view(), name="billing-features"),
+    path("ai/providers/", AiProviderListView.as_view(), name="ai-provider-list"),
+    path("ai/usage/summary/", AiUsageSummaryView.as_view(), name="ai-usage-summary"),
     path("projects/", ProjectListCreateView.as_view(), name="project-list"),
     path("projects/<int:pk>/", ProjectDetailView.as_view(), name="project-detail"),
     path("products/", PublicProductListView.as_view(), name="product-public-list"),

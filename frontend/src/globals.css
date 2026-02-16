@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Sora:wght@600;700;800&family=IBM+Plex+Mono:wght@500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html,
+  body,
+  #app {
+    @apply min-h-full;
+  }
+
+  body {
+    @apply m-0 bg-slate-100 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    background-image:
+      radial-gradient(circle at 8% 4%, rgba(34, 211, 238, 0.15), transparent 36%),
+      radial-gradient(circle at 96% 2%, rgba(16, 185, 129, 0.12), transparent 32%);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading;
+  }
+
+  code {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+}

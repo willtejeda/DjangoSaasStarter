@@ -1,6 +1,6 @@
 # 05 Customize Template Into Your SaaS
 
-Goal: convert the starter into your product without breaking payment truth or fulfillment.
+Goal: convert the starter into your product without breaking payment truth, fulfillment trust, or schema ownership.
 
 ## 1. Lock the paid outcome first
 
@@ -17,8 +17,8 @@ Example:
 - Buyer: Solo creator with inconsistent publishing
 - Problem: Missed deadlines and no repeatable workflow
 - 7 day result: Publish 3 quality videos with one system
-- Entry offer: $49 one time toolkit
-- Upgrade: $29/month accountability subscription
+- Entry offer: $49 one-time toolkit
+- Upgrade: $29/month AI-assisted accountability subscription
 
 ## 2. Update messaging before backend changes
 
@@ -33,7 +33,18 @@ Update at minimum:
 
 A first-time visitor should understand who this is for, what outcome it creates, and why they should buy now.
 
-## 3. Model catalog and pricing from seller APIs
+## 3. Keep schema ownership strict
+
+Django owns schema. Supabase is operations and hosting.
+
+Required:
+
+- Use Django models and migrations for schema changes
+- Run `makemigrations` and `migrate` for every schema update
+
+Avoid direct schema edits in Supabase dashboard for Django-managed tables.
+
+## 4. Model catalog and pricing from seller APIs
 
 Create:
 
@@ -45,7 +56,7 @@ Do not hardcode prices in frontend. Keep catalog source of truth server-side.
 
 For each buyable price, set `metadata.checkout_url` to your Clerk checkout URL.
 
-## 4. Configure fulfillment paths
+## 5. Configure fulfillment paths
 
 Digital products:
 
@@ -57,7 +68,17 @@ Service products:
 - Upsert `ServiceOffer` for each service product
 - Validate bookings can be created from account routes
 
-## 5. Configure transactional email
+## 6. Configure AI subscription scaffolding
+
+Use recurring plans plus usage surfaces for AI products:
+
+- Define feature keys such as `ai_chat`, `ai_images`, `ai_video`
+- Configure at least one provider placeholder (`OPENROUTER_*` or `OLLAMA_*`)
+- Validate `/api/ai/providers/` and `/api/ai/usage/summary/`
+
+These usage values are starter placeholders until your provider telemetry is connected.
+
+## 7. Configure transactional email
 
 Use Resend for buyer lifecycle communication.
 
@@ -78,7 +99,7 @@ Implemented sends:
 
 Delivery is best-effort and should never block checkout or booking creation.
 
-## 6. Keep payment truth server-side
+## 8. Keep payment truth server-side
 
 Required production behavior:
 
@@ -95,7 +116,7 @@ Local-only flags:
 
 Keep all three disabled in production.
 
-## 7. Validate signed-in account UX
+## 9. Validate signed-in account UX
 
 Test these paths with both empty and populated data:
 
@@ -107,14 +128,14 @@ Test these paths with both empty and populated data:
 
 Fix any console errors before deployment.
 
-## 8. Validate outbound email behavior
+## 10. Validate outbound email behavior
 
 Before launch, verify both events in a staging-like environment:
 
-1. Complete one paid order and confirm the fulfillment email send in Resend.
-2. Create one booking request and confirm the booking email send in Resend.
+1. Complete one paid order and confirm fulfillment email send in Resend.
+2. Create one booking request and confirm booking email send in Resend.
 
-## 9. Ship only after quality gates pass
+## 11. Ship only after quality gates pass
 
 ```bash
 cd ./backend
@@ -125,7 +146,7 @@ cd ./frontend
 npm run build
 ```
 
-## 10. Track launch metrics from day one
+## 12. Track launch metrics from day one
 
 Track weekly:
 
@@ -135,6 +156,7 @@ Track weekly:
 - Refund rate
 - Active subscriptions
 - Revenue by offer
+- Usage-to-upgrade conversion for AI plans
 
 Starter benchmark target:
 

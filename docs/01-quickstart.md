@@ -1,6 +1,6 @@
 # 01 Quickstart
 
-Goal: run the app locally and confirm the stack is healthy.
+Goal: run the app locally, confirm stack health, and establish schema ownership rules.
 
 ## 1. Prerequisites
 
@@ -61,7 +61,17 @@ RESEND_API_KEY=re_xxx
 RESEND_FROM_EMAIL=Acme <updates@yourdomain.com>
 ```
 
-You can keep the remaining values from `.env.example` while bootstrapping locally.
+Optional AI provider placeholders:
+
+```bash
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_DEFAULT_MODEL=
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=
+```
+
+You can keep remaining values from `.env.example` while bootstrapping locally.
 
 Resend notes:
 
@@ -69,7 +79,18 @@ Resend notes:
 - `RESEND_REPLY_TO_EMAIL` is optional.
 - If `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing, email sending is skipped.
 
-## 5. Health checks
+## 5. Schema ownership check
+
+Django owns schema. Supabase is the Postgres host and operations surface.
+
+Required behavior:
+
+- Change schema via Django `models.py` and migrations.
+- Run `python3 manage.py makemigrations` and `python3 manage.py migrate`.
+
+Avoid editing Django-managed tables directly in Supabase dashboard.
+
+## 6. Health checks
 
 ```bash
 curl http://127.0.0.1:8000/api/health/
@@ -91,9 +112,9 @@ Expected on a fresh DB:
 []
 ```
 
-Open `http://127.0.0.1:5173` and verify the homepage renders.
+Open `http://127.0.0.1:5173` and verify homepage renders.
 
-## 6. Start script options
+## 7. Start script options
 
 From repo root:
 
@@ -120,7 +141,15 @@ Useful flags:
 - `BACKEND_RUN_MIGRATIONS=false` to skip migrations on backend script start
 - `FRONTEND_TYPECHECK_ON_START=false` to skip typecheck on frontend script start
 
-## 7. Optional Docker quick run
+## 8. Self-hosted direction
+
+Recommended default production model:
+
+- Run Django and frontend in Coolify
+- Run Supabase with your preferred self-host strategy
+- Keep external runtime dependencies limited to Clerk and Resend
+
+## 9. Optional Docker quick run
 
 Build and run backend image:
 
@@ -136,7 +165,7 @@ docker build -t djangostarter-frontend ./frontend
 docker run --rm -p 5173:80 djangostarter-frontend
 ```
 
-## 8. Quality checks before commit
+## 10. Quality checks before commit
 
 ```bash
 cd ./backend

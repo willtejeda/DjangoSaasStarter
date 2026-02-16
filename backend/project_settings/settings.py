@@ -213,6 +213,13 @@ RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="")
 RESEND_REPLY_TO_EMAIL = config("RESEND_REPLY_TO_EMAIL", default="")
 RESEND_TIMEOUT_SECONDS = config("RESEND_TIMEOUT_SECONDS", cast=int, default=10)
 
+# AI integration placeholders (optional).
+OPENROUTER_API_KEY = config("OPENROUTER_API_KEY", default="")
+OPENROUTER_BASE_URL = config("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
+OPENROUTER_DEFAULT_MODEL = config("OPENROUTER_DEFAULT_MODEL", default="")
+OLLAMA_BASE_URL = config("OLLAMA_BASE_URL", default="http://127.0.0.1:11434")
+OLLAMA_MODEL = config("OLLAMA_MODEL", default="")
+
 # Order confirmation controls.
 # Keep client-side payment confirmation disabled by default; rely on verified webhooks.
 ORDER_CONFIRM_ALLOW_MANUAL = config("ORDER_CONFIRM_ALLOW_MANUAL", cast=bool, default=False)

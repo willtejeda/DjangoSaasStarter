@@ -17,6 +17,7 @@ Read these docs in order:
 - Local backend and frontend setup
 - Product, pricing, checkout, and fulfillment flow
 - Transactional email setup with Resend
+- AI-first subscription usage scaffolding
 - API endpoints for buyer and seller operations
 - Common failure modes and fast fixes
 - A repeatable sequence for converting the template into your SaaS
@@ -28,11 +29,12 @@ It solves the same two questions most users ask:
 - Why do I need this?
 Answer: because auth, billing, and fulfillment are where MVPs break under real customers.
 - What problem does this solve?
-Answer: it gives you a production-minded base where payments, delivery, and account UX already work together.
+Answer: it gives you a production-minded base where payments, delivery, account UX, and usage surfaces already work together.
 
 ## Fast links
 
 - Root guide: `README.md`
+- Agent contract: `AGENTS.md`
 - Backend env reference: `backend/.env.example`
 - Frontend env reference: `frontend/.env.example`
 - Resend code path: `backend/api/emails.py`
@@ -44,3 +46,4 @@ Answer: it gives you a production-minded base where payments, delivery, and acco
 - Keep `ORDER_CONFIRM_ALLOW_MANUAL=False`
 - Keep `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False`
 - Confirm payments from verified Clerk webhooks only
+- Keep Django as schema owner for all Django-managed tables

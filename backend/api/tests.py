@@ -383,6 +383,35 @@ class ProjectApiTests(TestCase):
         self.assertEqual(response.data["feature"], "pro")
         self.assertTrue(response.data["enabled"])
 
+    @override_settings(
+        OPENROUTER_API_KEY="or_test_key",
+        OPENROUTER_BASE_URL="https://openrouter.ai/api/v1",
+        OPENROUTER_DEFAULT_MODEL="openai/gpt-4.1-mini",
+        OLLAMA_BASE_URL="http://127.0.0.1:11434",
+        OLLAMA_MODEL="llama3.2",
+    )
+    def test_ai_provider_endpoint_returns_env_configured_providers(self):
+        response = self._request("get", "/api/ai/providers/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+        openrouter = next(item for item in response.data if item["key"] == "openrouter")
+        ollama = next(item for item in response.data if item["key"] == "ollama")
+        self.assertTrue(openrouter["enabled"])
+        self.assertEqual(openrouter["base_url"], "https://openrouter.ai/api/v1")
+        self.assertEqual(openrouter["model_hint"], "openai/gpt-4.1-mini")
+        self.assertTrue(ollama["enabled"])
+        self.assertEqual(ollama["base_url"], "http://127.0.0.1:11434")
+
+    def test_ai_usage_summary_returns_buckets(self):
+        response = self._request("get", "/api/ai/usage/summary/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["plan_tier"], "pro")
+        self.assertEqual(len(response.data["buckets"]), 3)
+        self.assertEqual({bucket["key"] for bucket in response.data["buckets"]}, {"tokens", "images", "videos"})
+        self.assertIn("notes", response.data)
+
     def test_cannot_access_other_users_project(self):
         other_profile = Profile.objects.create(clerk_user_id="user_999", email="other@example.com")
         other_project = Project.objects.create(owner=other_profile, name="Other", slug="other")

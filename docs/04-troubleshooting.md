@@ -168,6 +168,39 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/profile/
 
 5. Retry purchase or booking and check backend logs for Resend warnings.
 
+## AI providers show as disabled in `/app`
+
+Problem:
+
+- AI env vars are not set for OpenRouter or Ollama placeholders.
+
+Fix:
+
+Set one or both in `backend/.env`:
+
+```bash
+OPENROUTER_API_KEY=or_xxx
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
+
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.2
+```
+
+Then restart backend and refresh `/app`.
+
+## AI usage summary looks unrealistic
+
+Problem:
+
+- Starter usage values are placeholders until you wire provider telemetry.
+
+Fix:
+
+- Use `/api/ai/usage/summary/` as an initial contract only.
+- Replace usage math with real counters from your model gateway logs or billing pipeline.
+- Keep subscription state webhook-driven from Clerk.
+
 ## CORS errors in browser
 
 Problem:

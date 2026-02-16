@@ -6,7 +6,7 @@ import {
   SignedOut,
   UserButton,
   useAuth,
-  useUser
+  useUser,
 } from '@clerk/clerk-react';
 import { SubscriptionDetailsButton } from '@clerk/clerk-react/experimental';
 import { useSignalEffect } from '@preact/signals-react';
@@ -23,7 +23,7 @@ import {
   nextThemeLabelSignal,
   resetLaunchCounterSignal,
   themeSignal,
-  toggleThemeSignal
+  toggleThemeSignal,
 } from './lib/signals';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
@@ -36,12 +36,6 @@ type NavigateFn = (nextPath: string) => void;
 type CheckoutStateValue = 'success' | 'cancel';
 type PlanTier = 'free' | 'pro' | 'enterprise';
 type GetTokenFn = ReturnType<typeof useAuth>['getToken'];
-
-interface CopyCard {
-  title: string;
-  body?: string;
-  points: string[];
-}
 
 interface ActivePrice {
   amount_cents: number;
@@ -151,6 +145,35 @@ interface BillingFeaturesResponse {
   enabled_features: string[];
 }
 
+interface AiProviderRecord {
+  key: string;
+  label: string;
+  kind: string;
+  enabled: boolean;
+  base_url: string;
+  model_hint?: string | null;
+  docs_url: string;
+  env_vars: string[];
+}
+
+interface AiUsageBucketRecord {
+  key: string;
+  label: string;
+  used: number;
+  limit: number | null;
+  unit: string;
+  reset_window: string;
+  percent_used: number | null;
+  near_limit: boolean;
+}
+
+interface AiUsageSummaryResponse {
+  period: string;
+  plan_tier: string;
+  buckets: AiUsageBucketRecord[];
+  notes: string[];
+}
+
 interface NavLinkProps {
   to: string;
   currentPath: string;
@@ -216,25 +239,42 @@ interface SignedAppProps {
   onToggleTheme: () => void;
 }
 
-interface ScreenIntroProps {
+interface PageIntroProps {
   eyebrow: string;
   title: string;
   description: string;
   actions?: ReactNode;
 }
 
-interface LivingTutorialProps {
+interface TutorialBlockProps {
   whatThisDoes: string;
   howToTest: string[];
   expectedResult: string;
 }
+
+function cn(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+const buttonBase =
+  'inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-60';
+const buttonPrimary =
+  `${buttonBase} bg-slate-950 text-white shadow-sm hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300`;
+const buttonSecondary =
+  `${buttonBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800`;
+const buttonGhost =
+  `${buttonBase} border border-transparent bg-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`;
+const sectionClass =
+  'rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80';
+const cardClass =
+  'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900';
 
 function formatCurrencyFromCents(cents: number, currency = 'USD'): string {
   const numeric = Number(cents || 0) / 100;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(numeric);
 }
 
@@ -274,13 +314,44 @@ function usePathname(): { pathname: string; navigate: NavigateFn } {
   return { pathname, navigate };
 }
 
+function statusPillClasses(status: string): string {
+  const normalized = (status || '').toLowerCase();
+  if (['paid', 'fulfilled', 'active', 'trialing', 'ready', 'confirmed', 'completed', 'digital'].includes(normalized)) {
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+  }
+  if (['pending_payment', 'requested', 'service', 'past_due', 'incomplete'].includes(normalized)) {
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+  }
+  if (['canceled', 'refunded', 'paused', 'locked'].includes(normalized)) {
+    return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  }
+  return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
+}
+
+function StatusPill({ value }: { value: string }): ReactElement {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]',
+        statusPillClasses(value)
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
 function NavLink({ to, currentPath, onNavigate, children }: NavLinkProps): ReactElement {
   const active = currentPath === to;
-
   return (
     <a
       href={to}
-      className={`site-link ${active ? 'site-link-active' : ''}`}
+      className={cn(
+        'rounded-lg px-3 py-2 text-sm font-medium transition',
+        active
+          ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+      )}
       onClick={(event) => {
         event.preventDefault();
         onNavigate(to);
@@ -293,87 +364,109 @@ function NavLink({ to, currentPath, onNavigate, children }: NavLinkProps): React
 
 function Header({ pathname, onNavigate, signedIn, expandedNav, themeLabel, onToggleTheme }: HeaderProps): ReactElement {
   return (
-    <header className="site-header panel">
-      <div className="site-brand-shell" onClick={() => onNavigate(signedIn ? '/app' : '/')}>
-        <div className="site-brand-mark">DS</div>
-        <div className="site-brand-text">
-          <strong className="site-brand">DjangoStarter</strong>
-          <span className="site-brand-subtitle">Revenue-first stack for creator SaaS</span>
+    <header className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/85 sm:px-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <button
+          type="button"
+          className="flex items-center gap-3 text-left"
+          onClick={() => onNavigate(signedIn ? '/app' : '/')}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-950 text-sm font-bold text-white dark:bg-cyan-400 dark:text-slate-950">
+            DS
+          </span>
+          <span>
+            <span className="block text-base font-bold text-slate-900 dark:text-slate-100">DjangoStarter</span>
+            <span className="block text-xs uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+              Cashflow-first SaaS starter for creators
+            </span>
+          </span>
+        </button>
+
+        <nav className="flex flex-wrap items-center gap-1">
+          <NavLink to={signedIn ? '/app' : '/'} currentPath={pathname} onNavigate={onNavigate}>
+            {signedIn ? 'Dashboard' : 'Home'}
+          </NavLink>
+          {signedIn ? <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Offers</NavLink> : null}
+          {signedIn ? <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink> : null}
+          {signedIn && expandedNav ? (
+            <>
+              <NavLink to="/account/purchases" currentPath={pathname} onNavigate={onNavigate}>Purchases</NavLink>
+              <NavLink to="/account/downloads" currentPath={pathname} onNavigate={onNavigate}>Downloads</NavLink>
+              <NavLink to="/account/subscriptions" currentPath={pathname} onNavigate={onNavigate}>Subscriptions</NavLink>
+              <NavLink to="/account/bookings" currentPath={pathname} onNavigate={onNavigate}>Bookings</NavLink>
+            </>
+          ) : null}
+        </nav>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={buttonGhost} onClick={onToggleTheme}>
+            {themeLabel}
+          </button>
+          {signedIn ? (
+            <UserButton afterSignOutUrl="/" />
+          ) : (
+            <>
+              <SignInButton mode="modal">
+                <button type="button" className={buttonSecondary}>Sign In</button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button type="button" className={buttonPrimary}>Start Free</button>
+              </SignUpButton>
+            </>
+          )}
         </div>
       </div>
-      <nav className="site-nav" aria-label="Primary">
-        <NavLink to={signedIn ? '/app' : '/'} currentPath={pathname} onNavigate={onNavigate}>
-          {signedIn ? 'Dashboard' : 'Home'}
-        </NavLink>
-        {signedIn ? (
-          <>
-            <NavLink to="/products" currentPath={pathname} onNavigate={onNavigate}>Offers</NavLink>
-            <NavLink to="/pricing" currentPath={pathname} onNavigate={onNavigate}>Pricing</NavLink>
-            {expandedNav ? (
-              <>
-                <NavLink to="/account/purchases" currentPath={pathname} onNavigate={onNavigate}>Purchases</NavLink>
-                <NavLink to="/account/downloads" currentPath={pathname} onNavigate={onNavigate}>Downloads</NavLink>
-                <NavLink to="/account/subscriptions" currentPath={pathname} onNavigate={onNavigate}>Subscriptions</NavLink>
-                <NavLink to="/account/bookings" currentPath={pathname} onNavigate={onNavigate}>Bookings</NavLink>
-              </>
-            ) : null}
-          </>
-        ) : null}
-      </nav>
-      <div className="site-actions">
-        <button type="button" className="button button-ghost theme-toggle" onClick={onToggleTheme}>
-          {themeLabel}
-        </button>
-        {signedIn ? (
-          <UserButton afterSignOutUrl="/" />
-        ) : (
-          <>
-            <SignInButton mode="modal">
-              <button type="button" className="button button-secondary">Sign In</button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <button type="button" className="button button-primary">Start Free</button>
-            </SignUpButton>
-          </>
-        )}
-      </div>
     </header>
   );
 }
 
-function ScreenIntro({ eyebrow, title, description, actions }: ScreenIntroProps): ReactElement {
+function PageIntro({ eyebrow, title, description, actions }: PageIntroProps): ReactElement {
   return (
-    <header className="screen-header">
-      <p className="screen-eyebrow">{eyebrow}</p>
-      <h1 className="screen-title">{title}</h1>
-      <p className="screen-lead">{description}</p>
-      {actions ? <div className="screen-actions">{actions}</div> : null}
+    <header className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">{eyebrow}</p>
+      <h1 className="max-w-4xl text-3xl font-black tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+        {title}
+      </h1>
+      <p className="max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300 sm:text-base">{description}</p>
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
     </header>
   );
 }
 
-function LivingTutorial({ whatThisDoes, howToTest, expectedResult }: LivingTutorialProps): ReactElement {
+function TutorialBlock({ whatThisDoes, howToTest, expectedResult }: TutorialBlockProps): ReactElement {
   return (
-    <article className="tutorial-shell">
-      <p className="eyebrow">Living Tutorial</p>
-      <div className="tutorial-grid">
-        <section className="tutorial-card">
-          <h3>What this does</h3>
-          <p>{whatThisDoes}</p>
+    <article className="rounded-2xl border border-cyan-200/70 bg-cyan-50/70 p-4 dark:border-cyan-800/70 dark:bg-cyan-950/20">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+        Living Tutorial
+      </p>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">What this does</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{whatThisDoes}</p>
         </section>
-        <section className="tutorial-card">
-          <h3>How to test now</h3>
-          <ol className="tutorial-list">
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">How to test</h3>
+          <ol className="list-decimal space-y-1 pl-4 text-sm text-slate-600 dark:text-slate-300">
             {howToTest.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ol>
         </section>
-        <section className="tutorial-card">
-          <h3>Expected result</h3>
-          <p>{expectedResult}</p>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Expected result</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{expectedResult}</p>
         </section>
       </div>
+    </article>
+  );
+}
+
+function StatCard({ label, value, note }: { label: string; value: string; note: string }): ReactElement {
+  return (
+    <article className={cardClass}>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
+      <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{value}</h3>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{note}</p>
     </article>
   );
 }
@@ -381,7 +474,7 @@ function LivingTutorial({ whatThisDoes, howToTest, expectedResult }: LivingTutor
 function MarketingHome(): ReactElement {
   useSignals();
 
-  const jumpToSection = (sectionId: string) => {
+  const jumpTo = (sectionId: string): void => {
     const section = window.document.getElementById(sectionId);
     if (!section) {
       return;
@@ -389,201 +482,131 @@ function MarketingHome(): ReactElement {
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const proofStats = [
+  const stackCards = [
     {
-      label: 'Audience',
-      value: 'Technical creators and micro teams',
-      note: 'People with shipping skills who need clearer monetization systems.'
-    },
-    {
-      label: 'Promise',
-      value: 'Trusted checkout to fulfillment path',
-      note: 'Payment truth is verified by webhook events before entitlement delivery.'
-    },
-    {
-      label: 'Goal',
-      value: 'First real revenue loop in 7 days',
-      note: 'Then iterate message, offer, and channel based on buyer behavior.'
-    }
-  ];
-
-  const frictionCards: CopyCard[] = [
-    {
-      title: 'Traffic shows up but revenue leaks',
-      body: 'Most starter stacks feel polished until real buyers hit checkout.',
+      title: 'Django owns the schema and migrations',
+      body: 'Models and migrations stay in Django. Supabase is your Postgres control plane, not a second schema owner.',
       points: [
-        'Client marks orders paid before the server can verify',
-        'Delivery logic breaks when payment status changes',
-        'Customers lose trust after a failed first purchase'
-      ]
+        'ORM and migrations stay predictable for AI agents',
+        'Server contracts remain explicit and testable',
+        'No drift between code and database structure',
+      ],
     },
     {
-      title: 'DjangoStarter fixes the money handoff',
-      body: 'You ship one paid offer with strict backend verification and clean account UX.',
+      title: 'Supabase adds operator speed',
+      body: 'Use Supabase for database operations, realtime channels, and admin visibility while Django remains source of truth.',
       points: [
-        'Pending orders originate in server APIs',
-        'Webhook events confirm paid state before fulfillment',
-        'Buyers can access purchases, downloads, and subscriptions immediately'
-      ]
-    }
+        'Realtime events available for product UX',
+        'Fast table inspection without custom dashboards',
+        'Works with self-hosted Supabase on your own infra',
+      ],
+    },
+    {
+      title: 'Clerk and Resend cover external edges',
+      body: 'Only auth and billing leave your stack through Clerk. Resend handles lifecycle email when you need campaign or status sends.',
+      points: [
+        'Webhook-first payment confirmation',
+        'Reliable auth without rebuilding identity stack',
+        'Transactional and marketing email on demand',
+      ],
+    },
   ];
 
-  const revenueRails = [
+  const aiPlans = [
     {
-      title: 'Server creates the order truth',
-      body: 'Checkout starts only after `POST /api/account/orders/create/` records a pending order.'
+      title: 'Digital Product',
+      outcome: 'Sell templates, packs, and assets with webhook-verified fulfillment.',
+      steps: ['One-time price', 'Asset grants', 'Download access tracking'],
     },
     {
-      title: 'Clerk webhook verifies payment',
-      body: 'Payment confirmation runs through `/api/webhooks/clerk/` so paid state is not spoofed in the client.'
+      title: 'Subscription + usage',
+      outcome: 'Ship AI chat, image, or video usage limits with monthly resets.',
+      steps: ['Recurring plan', 'Entitlement keys', 'Token and generation quotas'],
     },
     {
-      title: 'Fulfillment runs after verification',
-      body: 'Digital downloads, subscriptions, and service bookings unlock only after verified payment events.'
+      title: 'Service + automation',
+      outcome: 'Bundle advisory, implementation, or done-for-you workflows.',
+      steps: ['Service offer', 'Booking records', 'Lifecycle notifications'],
     },
-    {
-      title: 'Account routes become your trust layer',
-      body: 'Customers see purchases, downloads, subscriptions, and bookings in one coherent post-checkout experience.'
-    }
   ];
 
-  const sprintPlan = [
-    {
-      day: 'Day 1',
-      title: 'Nail one painful outcome',
-      body: 'Define one buyer, one problem, one paid promise. Kill extra scope.',
-      fallback: 'If stuck, interview two recent users and extract repeated pain language.'
-    },
-    {
-      day: 'Day 2',
-      title: 'Publish one priced offer',
-      body: 'Create one product, one active default price, and one clear CTA.',
-      fallback: 'If pricing is unclear, start with a mid-tier anchor and test willingness fast.'
-    },
-    {
-      day: 'Day 3',
-      title: 'Run payment verification tests',
-      body: 'Validate pending to paid transition through Clerk webhook events.',
-      fallback: 'If events fail, inspect webhook logs before touching frontend assumptions.'
-    },
-    {
-      day: 'Day 4',
-      title: 'Validate fulfillment states',
-      body: 'Confirm downloads, subscriptions, entitlements, or bookings appear only after payment.',
-      fallback: 'If missing, audit fulfillment handlers and entitlement keys first.'
-    },
-    {
-      day: 'Day 5',
-      title: 'Tighten conversion copy',
-      body: 'Rewrite headline, CTA labels, and offer bullets using buyer pain language.',
-      fallback: 'If copy feels vague, replace adjectives with measurable outcomes and timelines.'
-    },
-    {
-      day: 'Day 6 and 7',
-      title: 'Launch and collect signal',
-      body: 'Push to one distribution channel, watch checkout behavior, and iterate quickly.',
-      fallback: 'If traffic is low, run direct outreach and partner posts before buying ads.'
-    }
-  ];
-
-  const shippedSurfaces: CopyCard[] = [
-    {
-      title: 'Commerce Core',
-      points: ['Catalog and pricing models', 'Order creation plus webhook confirmation', 'Entitlement and fulfillment lifecycle']
-    },
-    {
-      title: 'Customer Experience',
-      points: ['Account purchases and downloads', 'Subscriptions and billing views', 'Bookings for service-style offers']
-    },
-    {
-      title: 'Seller Ops',
-      points: ['Seller endpoints for products and prices', 'Payment event verification path', 'Launch checklist and deploy safety checks']
-    },
-    {
-      title: 'Build Velocity',
-      points: ['Django + DRF backend', 'React 19 frontend with Clerk auth and billing', 'Production-safe feature flags for checkout confirmation']
-    }
-  ];
-
-  const scenarioStats = [
-    {
-      label: 'Starter offer',
-      value: '$79',
-      note: 'Single digital product or implementation template.'
-    },
-    {
-      label: '20 buyers',
-      value: '$1,580',
-      note: 'Gross top line before platform fees and delivery costs.'
-    },
-    {
-      label: 'Upsell at 25%',
-      value: '+$495',
-      note: 'If 5 buyers add a $99 support or coaching upsell.'
-    }
+  const launchMath = [
+    { label: 'Starter offer', value: '$79', note: 'Low-friction one-time product to validate demand.' },
+    { label: 'Monthly AI plan', value: '$29', note: 'Recurring revenue with token or generation limits.' },
+    { label: '30 customers', value: '$2,370+', note: 'Example month-one gross before fees and support costs.' },
   ];
 
   return (
     <>
-      <header className="panel tactical-hero">
-        <div className="tactical-hero-grid">
-          <div className="tactical-hero-main">
-            <p className="tactical-kicker">Tactical Growth Stack for Creator SaaS</p>
-            <h1 className="tactical-title">Creators do not need more boilerplate. They need reliable cash flow.</h1>
-            <p className="tactical-subtitle">
-              DjangoStarter gives technical creators one coherent route from offer to paid fulfillment.
-              You launch faster, protect payment truth, and keep customer trust when real money is on the line.
+      <section className={cn(sectionClass, 'overflow-hidden bg-gradient-to-br from-cyan-50 via-white to-emerald-50 dark:from-slate-900 dark:via-slate-900 dark:to-cyan-950/20')}>
+        <div className="grid gap-8 lg:grid-cols-[1.3fr,0.9fr] lg:items-start">
+          <div className="space-y-5">
+            <p className="inline-flex rounded-full border border-cyan-200 bg-cyan-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-800 dark:border-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200">
+              Revenue-first creator stack
             </p>
-            <div className="tactical-actions">
+            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-slate-900 dark:text-white sm:text-5xl">
+              Creators do not need more boilerplate. They need cash flow.
+            </h1>
+            <p className="max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
+              DjangoStarter helps Python creators launch offers that get paid and fulfilled correctly.
+              Build fast with Django + DRF, run self-hosted on Coolify, keep Supabase as your data control plane,
+              and keep payment truth on verified Clerk webhooks.
+            </p>
+            <div className="flex flex-wrap gap-2">
               <SignUpButton mode="modal">
-                <button type="button" className="button button-primary">Start Free and Build Revenue Loop</button>
+                <button type="button" className={buttonPrimary}>Start Free</button>
               </SignUpButton>
-              <button type="button" className="button button-secondary" onClick={() => jumpToSection('income-map')}>
-                Why Creators Stall
+              <button type="button" className={buttonSecondary} onClick={() => jumpTo('tutorials')}>
+                See Revenue Tutorials
               </button>
-              <button type="button" className="button button-secondary" onClick={() => jumpToSection('launch-sprint')}>
-                7 Day Launch Sprint
+              <button type="button" className={buttonSecondary} onClick={() => jumpTo('self-hosted')}>
+                Why This Stack
               </button>
             </div>
-            <div className="tactical-pill-row">
-              <span>One offer first</span>
-              <span>Webhook verified payments</span>
-              <span>Digital plus service fulfillment</span>
-              <span>Account UX that matches checkout promises</span>
+            <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">Self-hosted first</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">AI-agent ready</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">Webhook-secure checkout</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">Modular scaffolding</span>
             </div>
           </div>
 
-          <aside className="tactical-hero-aside">
-            <p className="eyebrow">Creator reality</p>
-            <h3>Great content does not matter if money flow breaks after checkout.</h3>
-            <ul className="check-grid">
-              <li>Conversion spikes die when payment state and delivery state diverge</li>
-              <li>Support costs rise fast when users cannot find what they bought</li>
-              <li>Clean onboarding and account routes protect repeat revenue</li>
+          <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">What this means in practice</h2>
+            <ul className="list-disc space-y-2 pl-5 text-sm text-slate-600 dark:text-slate-300">
+              <li>Checkout events can not spoof paid state from the browser</li>
+              <li>Downloads, subscriptions, and bookings unlock after verified payment</li>
+              <li>Your app ships with account pages users can trust</li>
+              <li>Your agent can extend features without breaking the revenue loop</li>
             </ul>
+            <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Signal sandbox</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">Launch Count: {launchCounterSignal.value}</span>
+                <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">Double: {launchCounterDoubleSignal.value}</span>
+                <span className="rounded-full bg-white px-2 py-1 capitalize dark:bg-slate-900">Momentum: {launchCounterMomentumSignal.value}</span>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className={buttonSecondary} onClick={incrementLaunchCounterSignal}>Push</button>
+                <button type="button" className={buttonGhost} onClick={resetLaunchCounterSignal}>Reset</button>
+              </div>
+            </div>
           </aside>
         </div>
+      </section>
 
-        <div className="tactical-proof-grid">
-          {proofStats.map((stat) => (
-            <article className="tactical-proof-card" key={stat.label}>
-              <p className="tactical-proof-label">{stat.label}</p>
-              <h3>{stat.value}</h3>
-              <p className="tactical-proof-note">{stat.note}</p>
-            </article>
-          ))}
-        </div>
-      </header>
-
-      <section className="panel tactical-section" id="income-map">
-        <p className="eyebrow">Why This Matters</p>
-        <h2>Most creator stacks fail in the handoff between checkout confidence and delivery confidence.</h2>
-        <div className="tactical-friction-grid">
-          {frictionCards.map((card) => (
-            <article className="tactical-card" key={card.title}>
-              <h3>{card.title}</h3>
-              <p>{card.body}</p>
-              <ul className="check-grid">
+      <section id="self-hosted" className={sectionClass}>
+        <PageIntro
+          eyebrow="Self-hosted architecture"
+          title="Django is source of truth. Supabase is your control plane."
+          description="This template is designed for low-cost ownership. Run app and Supabase on Coolify. Keep external dependencies limited to Clerk and Resend."
+        />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {stackCards.map((card) => (
+            <article key={card.title} className={cardClass}>
+              <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">{card.title}</h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{card.body}</p>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
                 {card.points.map((point) => (
                   <li key={point}>{point}</li>
                 ))}
@@ -593,52 +616,20 @@ function MarketingHome(): ReactElement {
         </div>
       </section>
 
-      <section className="panel tactical-section" id="profit-engine">
-        <p className="eyebrow">Revenue Protection Rails</p>
-        <h2>Conversion only counts if your backend proves payment and fulfills correctly every time.</h2>
-        <ol className="tactical-rails">
-          {revenueRails.map((item, index) => (
-            <li className="tactical-rail" key={item.title}>
-              <span className="tactical-rail-index">{index + 1}</span>
-              <div className="tactical-rail-body">
-                <strong>{item.title}</strong>
-                <p>{item.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="panel tactical-section" id="launch-sprint">
-        <p className="eyebrow">7 Day Launch Sprint</p>
-        <h2>Scope hard. Ship one monetized loop. Fix friction only where money moves.</h2>
-        <div className="tactical-sprint-grid">
-          {sprintPlan.map((step) => (
-            <article className="tactical-sprint-card" key={step.day}>
-              <p className="tactical-sprint-day">{step.day}</p>
-              <h3>{step.title}</h3>
-              <p>{step.body}</p>
-              <p className="tactical-fallback">If stuck: {step.fallback}</p>
-            </article>
-          ))}
-        </div>
-        <div className="tactical-actions">
-          <button type="button" className="button button-secondary" onClick={() => jumpToSection('included-surfaces')}>
-            Explore Included Surfaces
-          </button>
-        </div>
-      </section>
-
-      <section className="panel tactical-section" id="included-surfaces">
-        <p className="eyebrow">Included Surfaces</p>
-        <h2>Everything needed for a strict revenue loop ships ready for your offer strategy.</h2>
-        <div className="tactical-friction-grid">
-          {shippedSurfaces.map((group) => (
-            <article className="tactical-card" key={group.title}>
-              <h3>{group.title}</h3>
-              <ul className="check-grid">
-                {group.points.map((point) => (
-                  <li key={point}>{point}</li>
+      <section id="tutorials" className={sectionClass}>
+        <PageIntro
+          eyebrow="Revenue tutorials"
+          title="Three starter loops: digital product, subscription usage, and services."
+          description="The starter ships scaffolding for e-commerce and subscriptions. Extend it for AI chat, image generation, video generation, or any token-based feature."
+        />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {aiPlans.map((plan) => (
+            <article key={plan.title} className={cardClass}>
+              <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">{plan.title}</h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{plan.outcome}</p>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+                {plan.steps.map((step) => (
+                  <li key={step}>{step}</li>
                 ))}
               </ul>
             </article>
@@ -646,62 +637,39 @@ function MarketingHome(): ReactElement {
         </div>
       </section>
 
-      <section className="panel tactical-math">
-        <p className="eyebrow">Simple Money Math</p>
-        <h2>Use this as planning fuel while you tune conversion. It is an example, not a guarantee.</h2>
-        <div className="tactical-proof-grid">
-          {scenarioStats.map((item) => (
-            <article className="tactical-proof-card tactical-proof-card-highlight" key={item.label}>
-              <p className="tactical-proof-label">{item.label}</p>
-              <h3>{item.value}</h3>
-              <p className="tactical-proof-note">{item.note}</p>
-            </article>
+      <section className={sectionClass}>
+        <PageIntro
+          eyebrow="Money math"
+          title="Use simple economics first, then optimize conversion and retention."
+          description="These numbers are examples to help planning. Real results depend on traffic quality, offer fit, onboarding, and retention."
+        />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {launchMath.map((item) => (
+            <StatCard key={item.label} label={item.label} value={item.value} note={item.note} />
           ))}
         </div>
       </section>
 
-      <section className="panel signal-lab tactical-signal">
-        <p className="eyebrow">Growth Sandbox</p>
-        <h2>React 19 Signals are wired so you can prototype conversion-focused UI quickly.</h2>
-        <p className="helper-text">
-          One signal updates the launch count, derived double, and momentum state across the UI.
-        </p>
-        <div className="feature-list">
-          <span className="feature-tag">Launch Count: {launchCounterSignal.value}</span>
-          <span className="feature-tag">Double: {launchCounterDoubleSignal.value}</span>
-          <span className="feature-tag">Momentum: {launchCounterMomentumSignal.value}</span>
+      <section className={cn(sectionClass, 'border-cyan-200 dark:border-cyan-800')}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">Bottom line</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+              Build one trusted paid loop first. Then scale content and channels.
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              This starter is for builders who want control, speed, and clear monetization paths without buying another fragile boilerplate.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <SignUpButton mode="modal">
+              <button type="button" className={buttonPrimary}>Start Free</button>
+            </SignUpButton>
+            <SignInButton mode="modal">
+              <button type="button" className={buttonSecondary}>Sign In</button>
+            </SignInButton>
+          </div>
         </div>
-        <div className="hero-actions">
-          <button type="button" className="button button-primary" onClick={incrementLaunchCounterSignal}>
-            Push Signal
-          </button>
-          <button type="button" className="button button-secondary" onClick={resetLaunchCounterSignal}>
-            Reset
-          </button>
-        </div>
-      </section>
-
-      <section className="panel landing-final tactical-final">
-        <div>
-          <p className="eyebrow">Bottom Line</p>
-          <h2>If your first paid loop is not trustworthy, your audience will not buy twice.</h2>
-          <p className="helper-text">
-            Build trust first, then scale content and distribution with confidence.
-          </p>
-        </div>
-        <div className="tactical-actions">
-          <SignUpButton mode="modal">
-            <button type="button" className="button button-primary">Start Free and Launch This Week</button>
-          </SignUpButton>
-          <SignInButton mode="modal">
-            <button type="button" className="button button-secondary">Sign In</button>
-          </SignInButton>
-        </div>
-        <ul className="check-grid">
-          <li>No hardcoded frontend pricing assumptions</li>
-          <li>No production payment confirmation shortcuts</li>
-          <li>No deploy without tests and build passing</li>
-        </ul>
       </section>
     </>
   );
@@ -709,29 +677,29 @@ function MarketingHome(): ReactElement {
 
 function PricingPage({ signedIn }: PricingPageProps): ReactElement {
   return (
-    <section className="screen">
-      <ScreenIntro
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
         eyebrow="Pricing"
-        title="Live billing plans from Clerk"
-        description="Configure plans in Clerk Billing and this page renders the latest catalog in real time."
+        title="Live plans from Clerk Billing"
+        description="No hardcoded frontend prices. Configure plans in Clerk and this page updates immediately."
       />
-      <LivingTutorial
-        whatThisDoes="Renders your live Clerk pricing table so customers can select plans and start checkout."
+      <TutorialBlock
+        whatThisDoes="Renders your active Clerk plans so buyers can start subscription checkout without manual frontend edits."
         howToTest={[
-          'Open Clerk Billing and create at least one plan',
-          'Refresh this page and confirm the plan appears',
-          'Use the plan CTA and confirm checkout opens'
+          'Create a plan in Clerk Billing',
+          'Refresh this page and confirm it appears',
+          'Run checkout and confirm webhook updates subscriptions',
         ]}
-        expectedResult="Plans render from Clerk config, not hardcoded frontend values."
+        expectedResult="Pricing is source-of-truth from Clerk and account subscription data stays in sync."
       />
-      <div className="surface-card pricing-shell">
+      <div className={cardClass}>
         <PricingTable />
       </div>
-      {signedIn ? (
-        <p className="helper-text">Signed in customers can manage active plans from subscriptions.</p>
-      ) : (
-        <p className="helper-text">Sign in to subscribe and manage your billing profile.</p>
-      )}
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        {signedIn
+          ? 'Signed in users can manage plans from subscriptions and billing portal.'
+          : 'Sign in first to subscribe and test billing flow.'}
+      </p>
     </section>
   );
 }
@@ -771,58 +739,60 @@ function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
   }, []);
 
   return (
-    <section className="screen">
-      <ScreenIntro
-        eyebrow="Catalog"
-        title="Offers ready to buy"
-        description="Choose a digital product or service offer. Clerk handles payment while the app handles fulfillment."
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
+        eyebrow="Offers"
+        title="Buyable offers with production checkout paths"
+        description="Publish digital or service products, attach prices, and route buyers into secure order creation."
       />
-      <LivingTutorial
-        whatThisDoes="Lists published offers from your product catalog API and routes buyers into product detail checkout flows."
+      <TutorialBlock
+        whatThisDoes="Shows published catalog entries and current active prices from backend APIs."
         howToTest={[
-          'Create one product with an active price using seller endpoints',
-          'Refresh this page and verify the product card appears with price',
-          'Open the offer and continue into checkout'
+          'Create a product and active price in seller APIs',
+          'Refresh and open the product detail page',
+          'Start checkout to create a pending order',
         ]}
-        expectedResult="Catalog displays only published offers and current active price data."
+        expectedResult="Catalog cards always reflect backend data and payment flow stays server-led."
       />
-      {error ? <p className="warning-text">{error}</p> : null}
-      {loading ? <p>Loading catalog...</p> : null}
+
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600 dark:text-slate-300">Loading catalog...</p> : null}
+
       {!loading && products.length === 0 ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No published products yet</h3>
-          <p className="surface-copy">
-            Create your first product and active price from seller endpoints, then return here to validate catalog rendering.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No published products yet</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Create one product and one active price, then return to validate conversion flow.
           </p>
-          <div className="screen-actions">
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-              Open Pricing Surface
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className={buttonSecondary} onClick={() => onNavigate('/pricing')}>
+              Open Pricing
             </button>
-            <button type="button" className="button button-primary" onClick={() => onNavigate('/app')}>
-              Open Launch Checklist
+            <button type="button" className={buttonPrimary} onClick={() => onNavigate('/app')}>
+              Open Launch Console
             </button>
           </div>
         </article>
       ) : null}
 
-      <div className="cards-grid cards-grid-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         {products.map((product) => (
-          <article key={product.id} className="surface-card">
-            <div className="surface-head">
-              <span className={`pill pill-${product.product_type}`}>{product.product_type}</span>
-              {product.active_price ? (
-                <strong className="price-inline">
-                  {formatCurrencyFromCents(product.active_price.amount_cents, product.active_price.currency)}
-                </strong>
-              ) : (
-                <strong className="price-inline">Unpriced</strong>
-              )}
+          <article key={product.id} className={cardClass}>
+            <div className="flex items-start justify-between gap-3">
+              <StatusPill value={product.product_type} />
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                {product.active_price
+                  ? formatCurrencyFromCents(product.active_price.amount_cents, product.active_price.currency)
+                  : 'Unpriced'}
+              </p>
             </div>
-            <h3 className="surface-title">{product.name}</h3>
-            <p className="surface-copy">{product.tagline || product.description || 'No description yet.'}</p>
+            <h3 className="mt-3 text-xl font-bold tracking-tight text-slate-900 dark:text-white">{product.name}</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {product.tagline || product.description || 'No description yet.'}
+            </p>
             <button
               type="button"
-              className="button button-secondary"
+              className={cn(buttonSecondary, 'mt-4 w-full')}
               onClick={() => onNavigate(`/products/${product.slug}`)}
             >
               View Offer
@@ -891,7 +861,7 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
         '/account/orders/create/',
         {
           method: 'POST',
-          body: { price_id: priceId, quantity: 1 }
+          body: { price_id: priceId, quantity: 1 },
         }
       );
 
@@ -909,7 +879,7 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
 
       if (!ENABLE_DEV_MANUAL_CHECKOUT) {
         throw new Error(
-          'Checkout URL missing for this price. Configure Clerk checkout metadata or enable VITE_ENABLE_DEV_MANUAL_CHECKOUT for local simulation only.'
+          'Checkout URL missing for this price. Configure Clerk checkout metadata or use local manual mode only in development.'
         );
       }
 
@@ -920,12 +890,12 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
           method: 'POST',
           body: {
             provider: 'manual',
-            external_id: `manual_${Date.now()}`
-          }
+            external_id: `manual_${Date.now()}`,
+          },
         }
       );
 
-      setSuccess('Purchase completed. Your fulfillment has been created.');
+      setSuccess('Purchase completed. Fulfillment has been created.');
       onNavigate('/checkout/success');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not complete purchase flow.');
@@ -936,83 +906,80 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
 
   if (loading) {
     return (
-      <section className="screen">
-        <ScreenIntro
-          eyebrow="Offer"
-          title="Loading offer"
-          description="We are fetching product details, pricing, and fulfillment metadata."
-        />
+      <section className={sectionClass}>
+        <PageIntro eyebrow="Offer" title="Loading offer" description="Fetching product details and pricing." />
       </section>
     );
   }
 
   if (!product) {
     return (
-      <section className="screen">
-        <ScreenIntro
-          eyebrow="Offer"
-          title="Offer not found"
-          description="This product route does not map to a published offer."
-        />
+      <section className={sectionClass}>
+        <PageIntro eyebrow="Offer" title="Offer not found" description="This route does not match a published product." />
       </section>
     );
   }
 
   return (
-    <section className="screen">
-      <ScreenIntro
-        eyebrow="Offer Detail"
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
+        eyebrow="Offer detail"
         title={product.name}
         description={product.description || product.tagline || 'No description yet.'}
         actions={(
           <>
-            <span className={`pill pill-${product.product_type}`}>{product.product_type}</span>
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>
-              Back to Catalog
+            <StatusPill value={product.product_type} />
+            <button type="button" className={buttonSecondary} onClick={() => onNavigate('/products')}>
+              Back to Offers
             </button>
           </>
         )}
       />
-      <LivingTutorial
-        whatThisDoes="Shows offer pricing options and sends buyers into secure order creation and checkout."
+
+      <TutorialBlock
+        whatThisDoes="Creates pending orders server-side and routes users into checkout without trusting client payment state."
         howToTest={[
-          'Confirm at least one price exists for this product',
-          'Click Buy Now and verify order create succeeds',
-          'Complete payment and confirm redirect to checkout success'
+          'Confirm at least one price exists on this product',
+          'Click Buy and ensure pending order is created',
+          'Finish checkout and confirm fulfillment in account pages',
         ]}
-        expectedResult="Order starts pending, payment confirms server-side, and fulfillment appears in account routes."
+        expectedResult="Order status transitions happen server-side and fulfillment appears only after payment confirmation."
       />
 
-      {error ? <p className="warning-text">{error}</p> : null}
-      {success ? <p className="success-text">{success}</p> : null}
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {success ? <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{success}</p> : null}
 
       {!product.prices?.length ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No price attached to this offer</h3>
-          <p className="surface-copy">
-            Add at least one active price through seller APIs, then return to validate purchase flow.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No price attached to this offer</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Add at least one active price through seller APIs, then return to validate checkout flow.
           </p>
-          <div className="screen-actions">
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className={buttonSecondary} onClick={() => onNavigate('/pricing')}>
               Open Pricing
             </button>
-            <button type="button" className="button button-primary" onClick={() => onNavigate('/app')}>
-              Back to Checklist
+            <button type="button" className={buttonPrimary} onClick={() => onNavigate('/app')}>
+              Back to Launch Console
             </button>
           </div>
         </article>
       ) : (
-        <div className="cards-grid cards-grid-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {(product.prices || []).map((price) => (
-            <article className="surface-card" key={price.id}>
-              <div className="surface-head">
-                <h3 className="surface-title">{price.name || price.billing_period}</h3>
-                <span className="plan-price">{formatCurrencyFromCents(price.amount_cents, price.currency)}</span>
+            <article className={cardClass} key={price.id}>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{price.name || price.billing_period}</h3>
+                <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  {formatCurrencyFromCents(price.amount_cents, price.currency)}
+                </p>
               </div>
-              <p className="plan-audience">Billed {price.billing_period.replace('_', ' ')}</p>
+              <p className="mt-1 text-sm capitalize text-slate-600 dark:text-slate-300">
+                Billed {price.billing_period.replace('_', ' ')}
+              </p>
               <button
                 type="button"
-                className="button button-primary"
+                className={cn(buttonPrimary, 'mt-4 w-full')}
                 disabled={saving}
                 onClick={() => handleBuy(price.id)}
               >
@@ -1024,9 +991,9 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
       )}
 
       {product.assets?.length ? (
-        <article className="surface-card">
-          <h2 className="surface-title">Included assets</h2>
-          <ul className="check-grid">
+        <article className={cardClass}>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Included assets</h2>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
             {product.assets.map((asset) => (
               <li key={asset.id}>{asset.title}</li>
             ))}
@@ -1035,9 +1002,9 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
       ) : null}
 
       {product.service_offer ? (
-        <article className="surface-card">
-          <h2 className="surface-title">Service delivery</h2>
-          <ul className="check-grid">
+        <article className={cardClass}>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Service delivery details</h2>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
             <li>Session minutes: {product.service_offer.session_minutes}</li>
             <li>Delivery days: {product.service_offer.delivery_days}</li>
             <li>Revisions: {product.service_offer.revision_count}</li>
@@ -1071,46 +1038,48 @@ function PurchasesPage({ getToken, onNavigate }: TokenNavigateProps): ReactEleme
   }, []);
 
   return (
-    <section className="screen">
-      <ScreenIntro
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
         eyebrow="Account"
         title="Purchases"
-        description="Track order status, totals, and purchased item counts."
+        description="Track order status and verify payment transitions from pending to paid or fulfilled."
       />
-      <LivingTutorial
-        whatThisDoes="Displays every order tied to the signed-in account with payment state and totals."
+      <TutorialBlock
+        whatThisDoes="Displays every order for the signed-in account with server-side status and totals."
         howToTest={[
-          'Complete a checkout from any offer',
-          'Return here after webhook confirmation',
-          'Verify order status changes from pending to paid or fulfilled'
+          'Complete checkout from any offer',
+          'Return after webhook processing',
+          'Confirm status reflects paid or fulfilled',
         ]}
-        expectedResult="Orders reflect server-side payment truth, not optimistic frontend assumptions."
+        expectedResult="Order state is auditable and never relies on optimistic frontend state."
       />
-      {error ? <p className="warning-text">{error}</p> : null}
-      {loading ? <p>Loading purchases...</p> : null}
+
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600 dark:text-slate-300">Loading purchases...</p> : null}
+
       {!loading && orders.length === 0 ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No purchases yet</h3>
-          <p className="surface-copy">
-            Start from catalog, run one checkout, then come back to validate paid order state.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No purchases yet</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Run one checkout flow and return to validate payment transition.
           </p>
-          <div className="screen-actions">
-            <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-              Browse Offers
-            </button>
-          </div>
+          <button type="button" className={cn(buttonPrimary, 'mt-4')} onClick={() => onNavigate('/products')}>
+            Browse Offers
+          </button>
         </article>
       ) : null}
 
-      <div className="cards-grid cards-grid-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {orders.map((order) => (
-          <article key={order.public_id} className="surface-card">
-            <div className="surface-head">
-              <h3 className="surface-title">Order {String(order.public_id).slice(0, 8)}</h3>
-              <span className={`pill pill-${order.status}`}>{order.status}</span>
+          <article key={order.public_id} className={cardClass}>
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Order {String(order.public_id).slice(0, 8)}</h3>
+              <StatusPill value={order.status} />
             </div>
-            <p className="surface-copy">Total: {formatCurrencyFromCents(order.total_cents, order.currency)}</p>
-            <p className="surface-copy">{order.items?.length || 0} item(s)</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              Total: {formatCurrencyFromCents(order.total_cents, order.currency)}
+            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{order.items?.length || 0} item(s)</p>
           </article>
         ))}
       </div>
@@ -1150,43 +1119,45 @@ function SubscriptionsPage({ getToken, onNavigate }: TokenNavigateProps): ReactE
   }, []);
 
   return (
-    <section className="screen">
-      <ScreenIntro
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
         eyebrow="Account"
         title="Subscriptions"
-        description="See all recurring plans and subscription status in one place."
+        description="Monitor recurring plans and usage-ready billing tiers."
       />
-      <LivingTutorial
-        whatThisDoes="Shows recurring subscription records and current billing state for this customer."
+      <TutorialBlock
+        whatThisDoes="Shows recurring subscription records synced from checkout and webhook events."
         howToTest={[
-          'Subscribe to a recurring plan from pricing or an offer',
-          'Return here and confirm subscription appears with status',
-          'Open Clerk details and verify plan metadata matches'
+          'Subscribe to a recurring plan',
+          'Confirm status appears here',
+          'Open Clerk details and verify metadata alignment',
         ]}
-        expectedResult="Subscription status and plan amount remain consistent across app and Clerk."
+        expectedResult="Subscription state remains consistent between app records and Clerk billing data."
       />
-      {error ? <p className="warning-text">{error}</p> : null}
-      {loading ? <p>Loading subscriptions...</p> : null}
+
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600 dark:text-slate-300">Loading subscriptions...</p> : null}
+
       {!loading && subscriptions.length === 0 ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No active subscriptions found</h3>
-          <p className="surface-copy">
-            Add a recurring plan and run one subscription checkout to validate this page.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No active subscriptions found</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Add one recurring plan and complete checkout to validate this surface.
           </p>
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/pricing')}>
+          <button type="button" className={cn(buttonPrimary, 'mt-4')} onClick={() => onNavigate('/pricing')}>
             Open Pricing
           </button>
         </article>
       ) : null}
 
-      <div className="cards-grid cards-grid-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {subscriptions.map((subscription) => (
-          <article key={subscription.id} className="surface-card">
-            <div className="surface-head">
-              <h3 className="surface-title">{subscription.product_name || 'Subscription'}</h3>
-              <span className={`pill pill-${subscription.status}`}>{subscription.status}</span>
+          <article key={subscription.id} className={cardClass}>
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{subscription.product_name || 'Subscription'}</h3>
+              <StatusPill value={subscription.status} />
             </div>
-            <p className="surface-copy">
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               {subscription.price_summary
                 ? `${formatCurrencyFromCents(subscription.price_summary.amount_cents, subscription.price_summary.currency)} ${subscription.price_summary.billing_period}`
                 : 'No linked local price'}
@@ -1196,13 +1167,15 @@ function SubscriptionsPage({ getToken, onNavigate }: TokenNavigateProps): ReactE
       </div>
 
       <SignedIn>
-        <div className="surface-card">
-          <h3 className="surface-title">Manage in Clerk</h3>
-          <p className="surface-copy">Open Clerk subscription details for invoices and payment methods.</p>
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Manage in Clerk</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Open subscription details for invoices and payment methods.
+          </p>
           <SubscriptionDetailsButton>
-            <button type="button" className="button button-secondary">Open Subscription Details</button>
+            <button type="button" className={cn(buttonSecondary, 'mt-4')}>Open Subscription Details</button>
           </SubscriptionDetailsButton>
-        </div>
+        </article>
       </SignedIn>
     </section>
   );
@@ -1237,7 +1210,7 @@ function DownloadsPage({ getToken, onNavigate }: TokenNavigateProps): ReactEleme
 
     try {
       const payload = await authedRequest<DownloadAccessResponse>(getToken, `/account/downloads/${token}/access/`, {
-        method: 'POST'
+        method: 'POST',
       });
 
       const downloadUrl = payload?.download_url || '';
@@ -1253,49 +1226,51 @@ function DownloadsPage({ getToken, onNavigate }: TokenNavigateProps): ReactEleme
   };
 
   return (
-    <section className="screen">
-      <ScreenIntro
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
         eyebrow="Account"
         title="Downloads"
-        description="Generate secure download links and track grant usage."
+        description="Generate signed download links and track grant usage."
       />
-      <LivingTutorial
-        whatThisDoes="Lists digital delivery grants and creates temporary access links per granted asset."
+      <TutorialBlock
+        whatThisDoes="Lists digital delivery grants and creates temporary access links per asset."
         howToTest={[
           'Buy a digital product with attached asset',
-          'Return here and confirm grant shows as ready',
-          'Request link and verify usage count updates'
+          'Confirm grant appears as ready',
+          'Generate link and verify usage count increments',
         ]}
-        expectedResult="Only eligible grants can generate access links and counts increment correctly."
+        expectedResult="Eligible grants produce secure links and usage counters remain accurate."
       />
-      {error ? <p className="warning-text">{error}</p> : null}
-      {loading ? <p>Loading downloadable assets...</p> : null}
+
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600 dark:text-slate-300">Loading downloads...</p> : null}
+
       {!loading && grants.length === 0 ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No digital deliveries yet</h3>
-          <p className="surface-copy">
-            Fulfillment grants are created after paid digital orders. Run one checkout first.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No digital deliveries yet</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Fulfillment grants appear after paid digital orders.
           </p>
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+          <button type="button" className={cn(buttonPrimary, 'mt-4')} onClick={() => onNavigate('/products')}>
             Browse Offers
           </button>
         </article>
       ) : null}
 
-      <div className="cards-grid cards-grid-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {grants.map((grant) => (
-          <article key={grant.token} className="surface-card">
-            <div className="surface-head">
-              <h3 className="surface-title">{grant.asset_title}</h3>
-              <span className={`pill ${grant.can_download ? 'pill-live' : 'pill-paused'}`}>
-                {grant.can_download ? 'ready' : 'locked'}
-              </span>
+          <article key={grant.token} className={cardClass}>
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{grant.asset_title}</h3>
+              <StatusPill value={grant.can_download ? 'ready' : 'locked'} />
             </div>
-            <p className="surface-copy">{grant.product_name}</p>
-            <p className="surface-copy">{grant.download_count}/{grant.max_downloads} downloads used</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{grant.product_name}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {grant.download_count}/{grant.max_downloads} downloads used
+            </p>
             <button
               type="button"
-              className="button button-primary"
+              className={cn(buttonPrimary, 'mt-4 w-full')}
               disabled={!grant.can_download || accessingToken === grant.token}
               onClick={() => requestAccess(grant.token)}
             >
@@ -1340,43 +1315,45 @@ function BookingsPage({ getToken, onNavigate }: TokenNavigateProps): ReactElemen
   }, []);
 
   return (
-    <section className="screen">
-      <ScreenIntro
+    <section className={cn(sectionClass, 'space-y-6')}>
+      <PageIntro
         eyebrow="Account"
         title="Bookings"
         description="Review service delivery requests and customer notes."
       />
-      <LivingTutorial
-        whatThisDoes="Tracks service bookings generated by fulfilled service offer purchases."
+      <TutorialBlock
+        whatThisDoes="Tracks service bookings created by fulfilled service purchases."
         howToTest={[
-          'Create a service product and attach offer details',
-          'Purchase the service offer and wait for fulfillment',
-          'Confirm booking record appears with status and notes'
+          'Create and publish a service offer',
+          'Purchase service and wait for fulfillment',
+          'Confirm booking appears with status and notes',
         ]}
-        expectedResult="Every paid service order creates a booking record that can be managed operationally."
+        expectedResult="Paid service orders create operational booking records you can manage."
       />
-      {error ? <p className="warning-text">{error}</p> : null}
-      {loading ? <p>Loading booking requests...</p> : null}
+
+      {error ? <p className="text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600 dark:text-slate-300">Loading bookings...</p> : null}
+
       {!loading && bookings.length === 0 ? (
-        <article className="surface-card">
-          <h3 className="surface-title">No service bookings yet</h3>
-          <p className="surface-copy">
-            Service bookings appear after paid service fulfillment. Configure one service offer and test purchase.
+        <article className={cardClass}>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No service bookings yet</h3>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Service bookings appear after paid fulfillment.
           </p>
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+          <button type="button" className={cn(buttonPrimary, 'mt-4')} onClick={() => onNavigate('/products')}>
             Open Offers
           </button>
         </article>
       ) : null}
 
-      <div className="cards-grid cards-grid-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {bookings.map((booking) => (
-          <article key={booking.id} className="surface-card">
-            <div className="surface-head">
-              <h3 className="surface-title">{booking.product_name || 'Service booking'}</h3>
-              <span className={`pill pill-${booking.status}`}>{booking.status}</span>
+          <article key={booking.id} className={cardClass}>
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{booking.product_name || 'Service booking'}</h3>
+              <StatusPill value={booking.status} />
             </div>
-            <p className="surface-copy">{booking.customer_notes || 'No notes provided.'}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{booking.customer_notes || 'No notes provided.'}</p>
           </article>
         ))}
       </div>
@@ -1387,36 +1364,39 @@ function BookingsPage({ getToken, onNavigate }: TokenNavigateProps): ReactElemen
 function CheckoutState({ state, onNavigate }: CheckoutStateProps): ReactElement {
   const isSuccess = state === 'success';
   return (
-    <section className={`screen ${isSuccess ? 'state-success' : 'state-cancel'}`}>
-      <ScreenIntro
+    <section
+      className={cn(
+        sectionClass,
+        'space-y-6',
+        isSuccess
+          ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-700 dark:bg-emerald-900/10'
+          : 'border-rose-300 bg-rose-50/60 dark:border-rose-700 dark:bg-rose-900/10'
+      )}
+    >
+      <PageIntro
         eyebrow="Checkout"
         title={isSuccess ? 'Checkout Successful' : 'Checkout Canceled'}
         description={
           isSuccess
-            ? 'Payment completed and fulfillment is now available in your account.'
-          : 'No charge was made. Return to products and try checkout again.'
+            ? 'Payment completed. Fulfillment is now available in your account routes.'
+            : 'No charge was made. Return to offers and retry checkout when ready.'
         }
       />
-      <LivingTutorial
-        whatThisDoes="Confirms final checkout outcome and sends users to the next high-value validation step."
+      <TutorialBlock
+        whatThisDoes="Confirms checkout outcome and routes users to the next high-value step."
         howToTest={[
-          'Complete checkout once to hit success route',
-          'Cancel checkout once to hit cancel route',
-          'Follow CTA and confirm downstream pages reflect state correctly'
+          'Complete checkout once for success route',
+          'Cancel checkout once for cancel route',
+          'Follow CTA and verify downstream pages match state',
         ]}
-        expectedResult="Users always have a clear next action after checkout, never a dead-end page."
+        expectedResult="Users always land on a clear next action after checkout."
       />
-      <p className="helper-text">
-        {isSuccess
-          ? 'Payment completed. Your order fulfillment is available in purchases and downloads.'
-          : 'No charge was made. You can return to product details and try again.'}
-      </p>
-      <div className="screen-actions">
-        <button type="button" className="button button-primary" onClick={() => onNavigate('/account/purchases')}>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={buttonPrimary} onClick={() => onNavigate('/account/purchases')}>
           View Purchases
         </button>
-        <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>
-          Browse Products
+        <button type="button" className={buttonSecondary} onClick={() => onNavigate('/products')}>
+          Browse Offers
         </button>
       </div>
     </section>
@@ -1425,10 +1405,36 @@ function CheckoutState({ state, onNavigate }: CheckoutStateProps): ReactElement 
 
 function MetricCard({ label, value, note }: MetricCardProps): ReactElement {
   return (
-    <article className="surface-card metric-card">
-      <p className="metric-label">{label}</p>
-      <h3 className="metric-value">{value}</h3>
-      <p className="metric-note">{note}</p>
+    <article className={cardClass}>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
+      <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{value}</h3>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{note}</p>
+    </article>
+  );
+}
+
+function UsageBar({ bucket }: { bucket: AiUsageBucketRecord }): ReactElement {
+  const percent = bucket.percent_used !== null ? Math.min(Math.max(bucket.percent_used, 0), 100) : null;
+
+  return (
+    <article className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">{bucket.label}</p>
+        <StatusPill value={bucket.near_limit ? 'near_limit' : 'healthy'} />
+      </div>
+      <p className="text-xs text-slate-600 dark:text-slate-300">
+        {bucket.used} / {bucket.limit ?? 'unlimited'} {bucket.unit} ({bucket.reset_window})
+      </p>
+      {percent !== null ? (
+        <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          <div
+            className={cn('h-full rounded-full', bucket.near_limit ? 'bg-amber-500' : 'bg-emerald-500')}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500 dark:text-slate-400">No cap configured</p>
+      )}
     </article>
   );
 }
@@ -1445,6 +1451,8 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
   const [entitlements, setEntitlements] = useState<EntitlementRecord[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<ProductRecord[]>([]);
+  const [aiProviders, setAiProviders] = useState<AiProviderRecord[]>([]);
+  const [aiUsage, setAiUsage] = useState<AiUsageSummaryResponse>({ period: 'current', plan_tier: 'free', buckets: [], notes: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -1469,7 +1477,9 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
         downloadsPayload,
         entitlementsPayload,
         bookingsPayload,
-        catalogPayload
+        catalogPayload,
+        aiProvidersPayload,
+        aiUsagePayload,
       ] = await Promise.all([
         authedRequest<MeResponse>(getToken, '/me/'),
         authedRequest<BillingFeaturesResponse>(getToken, '/billing/features/'),
@@ -1478,7 +1488,14 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
         authedRequest<DownloadGrant[]>(getToken, '/account/downloads/'),
         authedRequest<EntitlementRecord[]>(getToken, '/account/entitlements/'),
         authedRequest<BookingRecord[]>(getToken, '/account/bookings/'),
-        apiRequest<ProductRecord[]>('/products/').catch(() => [])
+        apiRequest<ProductRecord[]>('/products/').catch(() => []),
+        authedRequest<AiProviderRecord[]>(getToken, '/ai/providers/').catch(() => []),
+        authedRequest<AiUsageSummaryResponse>(getToken, '/ai/usage/summary/').catch(() => ({
+          period: 'current',
+          plan_tier: 'free',
+          buckets: [],
+          notes: [],
+        })),
       ]);
       setMe(mePayload || null);
       setBilling(billingPayload || { enabled_features: [] });
@@ -1488,6 +1505,8 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
       setEntitlements(Array.isArray(entitlementsPayload) ? entitlementsPayload : []);
       setBookings(Array.isArray(bookingsPayload) ? bookingsPayload : []);
       setCatalogProducts(Array.isArray(catalogPayload) ? catalogPayload : []);
+      setAiProviders(Array.isArray(aiProvidersPayload) ? aiProvidersPayload : []);
+      setAiUsage(aiUsagePayload || { period: 'current', plan_tier: 'free', buckets: [], notes: [] });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load dashboard data.');
     } finally {
@@ -1514,20 +1533,14 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
     user?.id ||
     'there';
 
-  const paidOrders = useMemo(
-    () => orders.filter((order) => ['paid', 'fulfilled'].includes(order.status)).length,
-    [orders]
-  );
+  const paidOrders = useMemo(() => orders.filter((order) => ['paid', 'fulfilled'].includes(order.status)).length, [orders]);
 
   const activeSubscriptions = useMemo(
     () => subscriptions.filter((subscription) => ['active', 'trialing', 'past_due'].includes(subscription.status)),
     [subscriptions]
   );
 
-  const readyDownloads = useMemo(
-    () => downloads.filter((grant) => grant.can_download).length,
-    [downloads]
-  );
+  const readyDownloads = useMemo(() => downloads.filter((grant) => grant.can_download).length, [downloads]);
 
   const currentEntitlements = useMemo(
     () => entitlements.filter((entitlement) => entitlement.is_current).length,
@@ -1545,42 +1558,52 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
     [catalogProducts]
   );
 
+  const configuredAiProviders = aiProviders.filter((provider) => provider.enabled).length;
+  const bucketsNearLimit = aiUsage.buckets.filter((bucket) => bucket.near_limit).length;
+
   const launchChecklist = [
     {
       key: 'offer',
       label: 'Publish one offer',
       route: '/products',
       done: publishedProducts > 0,
-      hint: 'Create one product with a clear buyer outcome.'
+      hint: 'Create one product with a painful buyer outcome.',
     },
     {
       key: 'price',
       label: 'Attach one active price',
       route: '/pricing',
       done: pricedProducts > 0,
-      hint: 'Every offer needs a live price to test conversion.'
+      hint: 'Every offer needs a live price before testing conversion.',
     },
     {
       key: 'payment',
       label: 'Create one order attempt',
       route: '/account/purchases',
       done: orders.length > 0,
-      hint: 'Start checkout from any offer and confirm an order record exists.'
+      hint: 'Start checkout from any offer and verify order record exists.',
     },
     {
       key: 'payment_confirm',
       label: 'Confirm paid status',
       route: '/account/purchases',
       done: paidOrders > 0,
-      hint: 'Wait for webhook processing and verify order moves to paid or fulfilled.'
+      hint: 'Wait for webhook processing and verify order moves to paid or fulfilled.',
     },
     {
       key: 'fulfillment',
       label: 'Verify fulfillment output',
       route: '/account/downloads',
       done: readyDownloads > 0 || bookings.length > 0 || currentEntitlements > 0 || activeSubscriptions.length > 0,
-      hint: 'Confirm downloads, bookings, subscriptions, or entitlements appear in account routes.'
-    }
+      hint: 'Confirm downloads, subscriptions, bookings, or entitlements appear only after payment.',
+    },
+    {
+      key: 'ai',
+      label: 'Configure AI provider scaffolding',
+      route: '/app',
+      done: configuredAiProviders > 0,
+      hint: 'Set OpenRouter or Ollama env vars and validate usage summary surfaces.',
+    },
   ];
 
   const completedChecklistCount = launchChecklist.filter((step) => step.done).length;
@@ -1596,7 +1619,7 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
     setError('');
     try {
       const payload = await authedRequest<DownloadAccessResponse>(getToken, `/account/downloads/${token}/access/`, {
-        method: 'POST'
+        method: 'POST',
       });
       const downloadUrl = payload?.download_url || '';
       if (downloadUrl) {
@@ -1612,145 +1635,168 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
 
   return (
     <>
-      <section className="screen">
-        <ScreenIntro
+      <section className={cn(sectionClass, 'space-y-6 bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-slate-900 dark:to-slate-900')}>
+        <PageIntro
           eyebrow="Launch Console"
           title={`Ship the first paid loop, ${displayName}.`}
-          description="This dashboard turns the template into an execution path so you always know the next highest-leverage action."
+          description="This dashboard keeps focus on revenue-critical tasks: offer, pricing, payment verification, and fulfillment confidence."
           actions={(
             <>
               {nextChecklistStep ? (
-                <button type="button" className="button button-primary" onClick={() => onNavigate(nextChecklistStep.route)}>
+                <button type="button" className={buttonPrimary} onClick={() => onNavigate(nextChecklistStep.route)}>
                   Continue: {nextChecklistStep.label}
                 </button>
               ) : (
-                <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+                <button type="button" className={buttonPrimary} onClick={() => onNavigate('/products')}>
                   Open Offers
                 </button>
               )}
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>
+              <button type="button" className={buttonSecondary} onClick={() => onNavigate('/products')}>
                 Offers
               </button>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
+              <button type="button" className={buttonSecondary} onClick={() => onNavigate('/pricing')}>
                 Pricing
               </button>
               {BILLING_PORTAL_URL ? (
-                <a className="button button-secondary" href={BILLING_PORTAL_URL} target="_blank" rel="noreferrer">
+                <a className={buttonSecondary} href={BILLING_PORTAL_URL} target="_blank" rel="noreferrer">
                   Manage Billing
                 </a>
               ) : (
                 <SubscriptionDetailsButton>
-                  <button type="button" className="button button-secondary">Manage Billing</button>
+                  <button type="button" className={buttonSecondary}>Manage Billing</button>
                 </SubscriptionDetailsButton>
               )}
             </>
           )}
         />
-        <LivingTutorial
-          whatThisDoes="Transforms setup into a strict launch checklist that reads real state from your APIs."
+
+        <TutorialBlock
+          whatThisDoes="Transforms setup into a measurable launch checklist sourced from live APIs."
           howToTest={[
             'Complete checklist steps in order',
-            'Refresh this page and confirm progress persists',
-            'Verify focused nav expands only after full checklist completion'
+            'Refresh and confirm progress persists',
+            'Confirm expanded nav unlocks after checklist completion',
           ]}
-          expectedResult="Users get one clear next action until the first paid loop is fully validated."
+          expectedResult="You always have one highest-leverage next action until paid loop is validated."
         />
-        <article className="launch-checklist-shell">
-          <div className="section-head-inline">
-            <h2>Launch checklist</h2>
-            <p className="checklist-progress">{completedChecklistCount}/{launchChecklist.length} complete</p>
+
+        <article className={cardClass}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Launch checklist</h2>
+            <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {completedChecklistCount}/{launchChecklist.length} complete
+            </p>
           </div>
-          <p className="helper-text">
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             {checklistComplete
-              ? 'Checklist complete. Navigation is now fully unlocked.'
-              : 'Navigation stays focused until this checklist is complete so setup does not sprawl.'}
+              ? 'Checklist complete. Full navigation is unlocked.'
+              : 'Navigation stays constrained until this checklist is complete to prevent setup sprawl.'}
           </p>
-          <div className="launch-checklist-grid">
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {launchChecklist.map((step, index) => (
-              <article className={`checklist-item ${step.done ? 'checklist-item-done' : ''}`} key={step.key}>
-                <div className="surface-head">
-                  <div className="checklist-index">{index + 1}</div>
-                  <h3 className="surface-title">{step.label}</h3>
-                  <span className={`pill ${step.done ? 'pill-live' : 'pill-paused'}`}>{step.done ? 'done' : 'next'}</span>
+              <article
+                key={step.key}
+                className={cn(
+                  'rounded-xl border p-4',
+                  step.done
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white dark:bg-cyan-400 dark:text-slate-950">
+                      {index + 1}
+                    </span>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{step.label}</h3>
+                  </div>
+                  <StatusPill value={step.done ? 'done' : 'next'} />
                 </div>
-                <p className="surface-copy">{step.hint}</p>
-                <button type="button" className="button button-secondary" onClick={() => onNavigate(step.route)}>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{step.hint}</p>
+                <button type="button" className={cn(buttonSecondary, 'mt-3')} onClick={() => onNavigate(step.route)}>
                   {step.done ? 'Review' : 'Do this now'}
                 </button>
               </article>
             ))}
           </div>
         </article>
-        <div className="cards-grid cards-grid-3">
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Plan" value={planTier.toUpperCase()} note={`${enabledFeatures.length} features enabled`} />
-          <MetricCard label="Published Offers" value={String(publishedProducts)} note={`${pricedProducts} with active price`} />
+          <MetricCard label="Offers" value={String(publishedProducts)} note={`${pricedProducts} with active price`} />
           <MetricCard label="Paid Orders" value={String(paidOrders)} note={`${orders.length} total purchases`} />
           <MetricCard label="Active Subs" value={String(activeSubscriptions.length)} note={`${subscriptions.length} total subscriptions`} />
-          <MetricCard label="Ready Downloads" value={String(readyDownloads)} note={`${downloads.length} total deliveries`} />
-          <MetricCard label="Feature Access" value={String(currentEntitlements)} note="Current entitlements" />
-          <MetricCard label="Open Requests" value={String(openServiceRequests)} note="Service bookings in progress" />
+          <MetricCard label="Downloads" value={String(readyDownloads)} note={`${downloads.length} total deliveries`} />
+          <MetricCard label="Entitlements" value={String(currentEntitlements)} note="Current access records" />
+          <MetricCard label="Service Requests" value={String(openServiceRequests)} note="Bookings in progress" />
+          <MetricCard
+            label="AI Providers"
+            value={String(configuredAiProviders)}
+            note={`${bucketsNearLimit} usage bucket(s) near limit`}
+          />
         </div>
       </section>
 
-      {error ? <section className="screen warning-panel"><p>{error}</p></section> : null}
+      {error ? (
+        <section className={cn(sectionClass, 'border-rose-300 bg-rose-50/70 dark:border-rose-700 dark:bg-rose-900/20')}>
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
+        </section>
+      ) : null}
 
-      <section className="screen">
-        <header className="section-head">
-          <h2>Recent activity</h2>
-          <p className="helper-text">Quick view of purchases and downloadable assets.</p>
-        </header>
-        <div className="cards-grid cards-grid-2">
-          <article className="surface-card stack-sm">
-            <div className="section-head-inline">
-              <h3 className="surface-title">Recent purchases</h3>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/purchases')}>
-                Open Purchases
+      <section className={cn(sectionClass, 'space-y-6')}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Recent activity</h2>
+          <button type="button" className={buttonSecondary} onClick={() => loadDashboard({ silent: true })}>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <article className={cardClass}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Recent purchases</h3>
+              <button type="button" className={buttonSecondary} onClick={() => onNavigate('/account/purchases')}>
+                Open
               </button>
             </div>
-            {loading ? <p className="helper-text">Loading purchases...</p> : null}
-            {!loading && orders.length === 0 ? <p className="helper-text">No purchases yet.</p> : null}
-            <div className="stack-sm">
-              {orders.slice(0, 5).map((order) => (
-                <article className="mini-card" key={order.public_id}>
-                  <div className="surface-head">
-                    <h4 className="surface-title">Order {String(order.public_id).slice(0, 8)}</h4>
-                    <span className={`pill pill-${order.status}`}>{order.status}</span>
+            {loading ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading purchases...</p> : null}
+            {!loading && orders.length === 0 ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">No purchases yet.</p> : null}
+            <div className="mt-3 space-y-3">
+              {orders.slice(0, 4).map((order) => (
+                <article key={order.public_id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Order {String(order.public_id).slice(0, 8)}</h4>
+                    <StatusPill value={order.status} />
                   </div>
-                  <p className="surface-copy">Total: {formatCurrencyFromCents(order.total_cents, order.currency)}</p>
-                  <p className="surface-copy">{order.items?.length || 0} item(s)</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    {formatCurrencyFromCents(order.total_cents, order.currency)}
+                  </p>
                 </article>
               ))}
             </div>
-            {!loading && orders.length === 0 ? (
-              <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Run first checkout
-              </button>
-            ) : null}
           </article>
 
-          <article className="surface-card stack-sm">
-            <div className="section-head-inline">
-              <h3 className="surface-title">Digital deliveries</h3>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/downloads')}>
-                Open Downloads
+          <article className={cardClass}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Digital deliveries</h3>
+              <button type="button" className={buttonSecondary} onClick={() => onNavigate('/account/downloads')}>
+                Open
               </button>
             </div>
-            {loading ? <p className="helper-text">Loading downloads...</p> : null}
-            {!loading && downloads.length === 0 ? <p className="helper-text">No digital deliveries available yet.</p> : null}
-            <div className="stack-sm">
-              {downloads.slice(0, 5).map((grant) => (
-                <article className="mini-card" key={grant.token}>
-                  <div className="surface-head">
-                    <h4 className="surface-title">{grant.asset_title}</h4>
-                    <span className={`pill ${grant.can_download ? 'pill-live' : 'pill-paused'}`}>
-                      {grant.can_download ? 'ready' : 'locked'}
-                    </span>
+            {loading ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading downloads...</p> : null}
+            {!loading && downloads.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">No digital deliveries yet.</p>
+            ) : null}
+            <div className="mt-3 space-y-3">
+              {downloads.slice(0, 4).map((grant) => (
+                <article key={grant.token} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{grant.asset_title}</h4>
+                    <StatusPill value={grant.can_download ? 'ready' : 'locked'} />
                   </div>
-                  <p className="surface-copy">{grant.product_name}</p>
-                  <p className="surface-copy">{grant.download_count}/{grant.max_downloads} downloads used</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{grant.product_name}</p>
                   <button
                     type="button"
-                    className="button button-primary"
+                    className={cn(buttonPrimary, 'mt-2 w-full')}
                     disabled={!grant.can_download || accessingToken === grant.token}
                     onClick={() => requestAccess(grant.token)}
                   >
@@ -1759,38 +1805,34 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
                 </article>
               ))}
             </div>
-            {!loading && downloads.length === 0 ? (
-              <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Buy a digital offer
-              </button>
-            ) : null}
           </article>
         </div>
       </section>
 
-      <section className="screen">
-        <header className="section-head">
-          <h2>Subscriptions, access, and service delivery</h2>
-          <p className="helper-text">Monitor recurring revenue, feature access, and booking pipeline.</p>
-        </header>
-        <div className="cards-grid cards-grid-2">
-          <article className="surface-card stack-sm">
-            <div className="section-head-inline">
-              <h3 className="surface-title">Subscriptions and access</h3>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/subscriptions')}>
-                Open Subscriptions
+      <section className={cn(sectionClass, 'space-y-6')}>
+        <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Subscriptions, access, and AI usage</h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <article className={cardClass}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Subscription state</h3>
+              <button type="button" className={buttonSecondary} onClick={() => onNavigate('/account/subscriptions')}>
+                Open
               </button>
             </div>
-            {loading ? <p className="helper-text">Loading subscriptions...</p> : null}
-            {!loading && activeSubscriptions.length === 0 ? <p className="helper-text">No active subscriptions found.</p> : null}
-            <div className="stack-sm">
+            {loading ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading subscriptions...</p> : null}
+            {!loading && activeSubscriptions.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">No active subscriptions found.</p>
+            ) : null}
+            <div className="mt-3 space-y-3">
               {activeSubscriptions.slice(0, 4).map((subscription) => (
-                <article className="mini-card" key={subscription.id}>
-                  <div className="surface-head">
-                    <h4 className="surface-title">{subscription.product_name || 'Subscription'}</h4>
-                    <span className={`pill pill-${subscription.status}`}>{subscription.status}</span>
+                <article key={subscription.id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {subscription.product_name || 'Subscription'}
+                    </h4>
+                    <StatusPill value={subscription.status} />
                   </div>
-                  <p className="surface-copy">
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                     {subscription.price_summary
                       ? `${formatCurrencyFromCents(subscription.price_summary.amount_cents, subscription.price_summary.currency)} ${subscription.price_summary.billing_period}`
                       : 'No linked local price'}
@@ -1798,67 +1840,79 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
                 </article>
               ))}
             </div>
-            <h4 className="surface-title">Current feature access</h4>
-            {entitlements.filter((entitlement) => entitlement.is_current).length === 0 ? (
-              <p className="helper-text">No active entitlements yet.</p>
-            ) : (
-              <div className="feature-list">
-                {entitlements
-                  .filter((entitlement) => entitlement.is_current)
-                  .slice(0, 8)
-                  .map((entitlement) => (
-                    <span className="feature-tag" key={entitlement.id}>
-                      {entitlement.feature_key}
-                    </span>
+            <h4 className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Current entitlements</h4>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {entitlements
+                .filter((entitlement) => entitlement.is_current)
+                .slice(0, 8)
+                .map((entitlement) => (
+                  <span
+                    className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                    key={entitlement.id}
+                  >
+                    {entitlement.feature_key}
+                  </span>
                 ))}
-              </div>
-            )}
-            {!loading && activeSubscriptions.length === 0 ? (
-              <button type="button" className="button button-primary" onClick={() => onNavigate('/pricing')}>
-                Start a subscription test
-              </button>
-            ) : null}
+              {entitlements.filter((entitlement) => entitlement.is_current).length === 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">No active entitlements yet.</p>
+              ) : null}
+            </div>
           </article>
 
-          <article className="surface-card stack-sm">
-            <div className="section-head-inline">
-              <h3 className="surface-title">Service bookings</h3>
-              <button type="button" className="button button-secondary" onClick={() => onNavigate('/account/bookings')}>
-                Open Bookings
-              </button>
-            </div>
-            {loading ? <p className="helper-text">Loading booking requests...</p> : null}
-            {!loading && bookings.length === 0 ? <p className="helper-text">No booking requests yet.</p> : null}
-            <div className="stack-sm">
-              {bookings.slice(0, 4).map((booking) => (
-                <article className="mini-card" key={booking.id}>
-                  <div className="surface-head">
-                    <h4 className="surface-title">{booking.product_name || 'Service booking'}</h4>
-                    <span className={`pill pill-${booking.status}`}>{booking.status}</span>
+          <article className={cardClass}>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">AI provider and usage scaffold</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              Built-in placeholders for OpenRouter and Ollama help you wire AI products with usage-aware subscription plans.
+            </p>
+            <div className="mt-3 space-y-2">
+              {aiProviders.map((provider) => (
+                <article key={provider.key} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{provider.label}</h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">{provider.base_url}</p>
+                    </div>
+                    <StatusPill value={provider.enabled ? 'configured' : 'disabled'} />
                   </div>
-                  <p className="surface-copy">{booking.customer_notes || 'No notes provided.'}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{provider.env_vars.join(', ')}</p>
                 </article>
               ))}
+              {aiProviders.length === 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">No providers detected yet.</p>
+              ) : null}
             </div>
-            {!loading && bookings.length === 0 ? (
-              <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Configure service offer
-              </button>
+            <div className="mt-3 space-y-2">
+              {aiUsage.buckets.map((bucket) => (
+                <UsageBar key={bucket.key} bucket={bucket} />
+              ))}
+              {aiUsage.buckets.length === 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">No usage buckets configured yet.</p>
+              ) : null}
+            </div>
+            {aiUsage.notes.length ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
+                {aiUsage.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
             ) : null}
           </article>
         </div>
       </section>
 
-      <section className="screen">
-        <article className="surface-card stack-sm">
-          <h2 className="surface-title">Developer context</h2>
-          <p className="helper-text">API base: <code>{apiBase}</code></p>
-          <p className="helper-text">Data refresh: {refreshing ? 'updating now' : 'automatic on page load and downloads'}</p>
-          <p className="helper-text">Use account routes for full details and auditability.</p>
-          {user ? (
-            <p className="helper-text">Signed in as {user.primaryEmailAddress?.emailAddress || user.username || user.id}</p>
-          ) : null}
-        </article>
+      <section className={cn(sectionClass, 'space-y-4')}>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Developer context</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          API base: <code className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">{apiBase}</code>
+        </p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Refresh status: {refreshing ? 'updating now' : 'automatic on load and download actions'}
+        </p>
+        {user ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Signed in as {user.primaryEmailAddress?.emailAddress || user.username || user.id}
+          </p>
+        ) : null}
       </section>
     </>
   );
@@ -1869,11 +1923,11 @@ function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signe
   const normalizedPath = hiddenCatalogPath ? '/' : pathname;
   const content = hiddenCatalogPath ? (
     <>
-      <section className="screen warning-panel">
-        <ScreenIntro
-          eyebrow="Template Preview"
-          title="Catalog and pricing are disabled while signed out"
-          description="This starter ships without seeded products or plans. Sign in to configure offers, then validate checkout and fulfillment from account routes."
+      <section className={cn(sectionClass, 'border-amber-300 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-900/20')}>
+        <PageIntro
+          eyebrow="Template preview"
+          title="Catalog and pricing are locked while signed out"
+          description="Sign in to configure offers and verify checkout plus fulfillment from account routes."
         />
       </section>
       <MarketingHome />
@@ -1883,7 +1937,7 @@ function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signe
   );
 
   return (
-    <main className="shell">
+    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
       <Header
         pathname={normalizedPath}
         onNavigate={onNavigate}
@@ -1938,23 +1992,23 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
     content = <CheckoutState state="cancel" onNavigate={onNavigate} />;
   } else if (pathname !== '/' && pathname !== '/app') {
     content = (
-      <section className="screen">
-        <ScreenIntro
+      <section className={sectionClass}>
+        <PageIntro
           eyebrow="404"
           title="Page not found"
-          description="This route is not available in the current app map."
-          actions={(
-            <button type="button" className="button button-secondary" onClick={() => onNavigate('/app')}>
+          description="This route is not part of the current app map."
+          actions={
+            <button type="button" className={buttonSecondary} onClick={() => onNavigate('/app')}>
               Back to Dashboard
             </button>
-          )}
+          }
         />
       </section>
     );
   }
 
   return (
-    <main className="shell">
+    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
       <Header
         pathname={pathname}
         onNavigate={onNavigate}
@@ -1972,12 +2026,14 @@ export function App(): ReactElement {
   useSignals();
 
   const { pathname, navigate } = usePathname();
+
   useSignalEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
     const themeValue = themeSignal.value;
+    document.documentElement.classList.toggle('dark', themeValue === 'dark');
     document.documentElement.dataset.theme = themeValue;
     window.localStorage.setItem(THEME_STORAGE_KEY, themeValue);
   });

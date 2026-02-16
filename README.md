@@ -1,6 +1,6 @@
-# Django + Supabase + Clerk + React Commerce Starter
+# DjangoStarter: Cashflow First SaaS Starter (Django + Supabase + Clerk + Resend + React)
 
-Production-minded starter for selling digital products and services.
+Production-minded starter for creators who want to ship paid products fast without breaking payment or fulfillment trust.
 
 ## Documentation Map
 
@@ -24,8 +24,22 @@ Django owns schema, migrations, data integrity, fulfillment workflows, and API c
 You get hosted Postgres, backups, SQL tools, and a cleaner data ops surface than relying only on Django admin.
 - `Clerk` handles authentication and billing.
 You offload auth/session complexity and use Clerk Billing for subscriptions and checkout.
+- `Resend` handles lifecycle communication.
+You can send offer updates, fulfillment notices, and transactional support messages.
 - `React 19` keeps the frontend modern and ecosystem-compatible.
-You can pair native React with signal-based state patterns for low-friction reactivity.
+You can pair native React with signal-based state patterns for low-friction reactivity and Tailwind-first UI customization.
+
+## Self Hosted by Default
+
+The default operating model is:
+
+- Deploy Django app with Coolify
+- Deploy Supabase with your own infra strategy
+- Keep only two external runtime dependencies:
+  - Clerk for auth and billing
+  - Resend for outbound email
+
+This keeps ongoing costs lower while preserving strong product control.
 
 ## Questions New Users Ask
 
@@ -42,8 +56,20 @@ Most early SaaS builds lose weeks rebuilding the same platform plumbing:
 - Checkout to paid order state transitions
 - Fulfillment and entitlement delivery after payment
 - Customer account views for purchases, downloads, subscriptions, and bookings
+- AI-ready subscription usage surfaces for tokens, images, and video
 
 DjangoStarter gives you those foundations already connected so you can ship a paid product faster with fewer production mistakes.
+
+## Schema Ownership Rules
+
+Django owns schema and migrations. Keep this strict.
+
+- Use Django models plus migrations for schema changes.
+- Run `python3 manage.py makemigrations` then `python3 manage.py migrate`.
+- Treat Supabase dashboard as an operations surface, not a parallel schema editor.
+- If tables are Django-managed, do not create or mutate them directly in Supabase UI.
+
+This contract keeps AI-assisted coding and production data integrity aligned.
 
 ## What Ships Now
 
@@ -208,6 +234,11 @@ docker run --rm -p 5173:80 djangostarter-frontend
 | `RESEND_FROM_EMAIL` | No | Verified sender identity for outbound emails (`Name <email@domain>`) |
 | `RESEND_REPLY_TO_EMAIL` | No | Optional reply-to email address |
 | `RESEND_TIMEOUT_SECONDS` | No | Outbound request timeout for Resend API calls (default `10`) |
+| `OPENROUTER_API_KEY` | No | Optional key to enable OpenRouter provider placeholder |
+| `OPENROUTER_BASE_URL` | No | OpenRouter base URL (`https://openrouter.ai/api/v1` default) |
+| `OPENROUTER_DEFAULT_MODEL` | No | Default model hint shown in AI provider surfaces |
+| `OLLAMA_BASE_URL` | No | Ollama server URL (`http://127.0.0.1:11434` default) |
+| `OLLAMA_MODEL` | No | Ollama model slug to mark local provider as configured |
 | `DRF_THROTTLE_ANON` | No | Default anonymous API throttle rate |
 | `DRF_THROTTLE_USER` | No | Default authenticated API throttle rate |
 | `DRF_THROTTLE_CHECKOUT_CREATE` | No | Throttle for `POST /api/account/orders/create/` |
@@ -245,6 +276,23 @@ Notes:
 - Requests use idempotency keys per event to reduce duplicate sends.
 
 See `docs/06-resend-transactional-email.md` for the full operator guide and troubleshooting flow.
+
+## AI First Subscription Scaffolding
+
+The starter includes modular placeholders for usage-aware AI subscriptions.
+
+Current built-in endpoints:
+
+- `GET /api/ai/providers/`
+- `GET /api/ai/usage/summary/`
+
+Use these to bootstrap:
+
+- OpenRouter-backed remote model products
+- Ollama-backed local model products
+- Token, image, and video usage displays in account UX
+
+These usage values are starter placeholders. Replace with your own provider telemetry pipeline when you wire production generation workloads.
 
 ## Clerk Billing Setup (Products, Plans, Subscriptions)
 
@@ -367,6 +415,11 @@ Implemented models in `backend/api/models.py`:
 - `GET /api/billing/features/`
 - `GET /api/billing/features/?feature=pro`
 
+### AI scaffolding
+
+- `GET /api/ai/providers/`
+- `GET /api/ai/usage/summary/`
+
 ### Buyer account
 
 - `GET/PATCH /api/account/customer/`
@@ -455,6 +508,17 @@ Protected endpoints support:
 - Clerk `__session` cookie
 
 Django verifies tokens against Clerk JWKS and enforces CSRF checks for cookie-authenticated unsafe methods.
+
+## Optional Django Hardening Extensions
+
+If you want stronger production posture, these are common next adds:
+
+- `django-csp` for explicit Content Security Policy headers on Django 4/5
+- `drf-spectacular` for OpenAPI schema generation and client SDK workflows
+- `django-axes` for anti-bruteforce login controls when adding Django credential auth
+- `sentry-sdk` for production error and performance monitoring
+
+Keep these optional so the starter remains lightweight and modular.
 
 ## Test Commands
 

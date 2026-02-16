@@ -64,6 +64,13 @@ curl -H "Authorization: Bearer $TOKEN" "$API/billing/features/"
 curl -H "Authorization: Bearer $TOKEN" "$API/billing/features/?feature=workflow_os"
 ```
 
+AI provider and usage placeholders:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "$API/ai/providers/"
+curl -H "Authorization: Bearer $TOKEN" "$API/ai/usage/summary/"
+```
+
 ## 4. Project endpoints
 
 Create project:
@@ -297,6 +304,12 @@ Clerk webhook receiver:
 ```text
 POST /api/webhooks/clerk/
 ```
+
+## 8. AI scaffolding notes
+
+- `/api/ai/providers/` is env-driven and reports OpenRouter and Ollama placeholder readiness.
+- `/api/ai/usage/summary/` returns starter usage buckets for tokens, images, and videos.
+- Replace placeholder usage math with real telemetry when integrating production model calls.
 
 Production rule: do not fake webhook confirmations. Use Clerk webhook delivery with valid `CLERK_WEBHOOK_SIGNING_SECRET`.
 

@@ -6,7 +6,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as django_timezone
 from rest_framework import generics, status
@@ -79,6 +79,71 @@ def _safe_str(value: Any) -> str:
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _resolve_plan_tier(profile: Profile, claims: dict[str, Any]) -> str:
+    tier = str(getattr(profile, "plan_tier", "") or "").strip().lower()
+    if tier in {"free", "pro", "enterprise"}:
+        return tier
+    return infer_plan_tier(extract_billing_features(claims))
+
+
+def _build_ai_provider_payload() -> list[dict[str, Any]]:
+    openrouter_base = _safe_str(getattr(settings, "OPENROUTER_BASE_URL", "")) or "https://openrouter.ai/api/v1"
+    openrouter_key = _safe_str(getattr(settings, "OPENROUTER_API_KEY", ""))
+    openrouter_model = _safe_str(getattr(settings, "OPENROUTER_DEFAULT_MODEL", ""))
+
+    ollama_base = _safe_str(getattr(settings, "OLLAMA_BASE_URL", "")) or "http://127.0.0.1:11434"
+    ollama_model = _safe_str(getattr(settings, "OLLAMA_MODEL", ""))
+
+    return [
+        {
+            "key": "openrouter",
+            "label": "OpenRouter",
+            "kind": "remote",
+            "enabled": bool(openrouter_key),
+            "base_url": openrouter_base,
+            "model_hint": openrouter_model,
+            "docs_url": "https://openrouter.ai/docs/quickstart",
+            "env_vars": ["OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_DEFAULT_MODEL"],
+        },
+        {
+            "key": "ollama",
+            "label": "Ollama",
+            "kind": "self_hosted",
+            "enabled": bool(ollama_model),
+            "base_url": ollama_base,
+            "model_hint": ollama_model,
+            "docs_url": "https://github.com/ollama/ollama/blob/main/docs/api.md",
+            "env_vars": ["OLLAMA_BASE_URL", "OLLAMA_MODEL"],
+        },
+    ]
+
+
+def _build_usage_bucket(
+    *,
+    key: str,
+    label: str,
+    used: int,
+    limit: int | None,
+    unit: str,
+    reset_window: str,
+) -> dict[str, Any]:
+    if limit is None or limit <= 0:
+        percent_used = None
+    else:
+        percent_used = round((used / limit) * 100, 2)
+    near_limit = bool(percent_used is not None and percent_used >= 80)
+    return {
+        "key": key,
+        "label": label,
+        "used": max(used, 0),
+        "limit": limit if limit and limit > 0 else None,
+        "unit": unit,
+        "reset_window": reset_window,
+        "percent_used": percent_used,
+        "near_limit": near_limit,
+    }
 
 
 def sync_profile_from_claims(claims: dict[str, Any]) -> Profile | None:
@@ -394,6 +459,100 @@ class BillingFeatureView(APIView):
             )
 
         return Response({"enabled_features": sorted(enabled_features)})
+
+
+class AiProviderListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(_build_ai_provider_payload())
+
+
+class AiUsageSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = get_request_profile(request)
+        account = get_request_customer_account(request)
+        claims = get_request_claims(request)
+
+        plan_tier = _resolve_plan_tier(profile, claims)
+        now = django_timezone.now()
+        paid_order_count = Order.objects.filter(
+            customer_account=account,
+            status__in=[Order.Status.PAID, Order.Status.FULFILLED],
+        ).count()
+        active_subscription_count = Subscription.objects.filter(
+            customer_account=account,
+            status__in=[Subscription.Status.ACTIVE, Subscription.Status.TRIALING, Subscription.Status.PAST_DUE],
+        ).count()
+        current_entitlement_count = Entitlement.objects.filter(
+            customer_account=account,
+            is_active=True,
+            starts_at__lte=now,
+        ).filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now)).count()
+        download_total = (
+            DownloadGrant.objects.filter(customer_account=account).aggregate(total=Sum("download_count")).get("total")
+            or 0
+        )
+        has_video_feature = Entitlement.objects.filter(
+            customer_account=account,
+            feature_key__icontains="video",
+            is_active=True,
+        ).exists()
+
+        usage_seed = {
+            "tokens": (active_subscription_count * 24000) + (current_entitlement_count * 1700) + (paid_order_count * 900),
+            "images": (active_subscription_count * 30) + paid_order_count + download_total,
+            "videos": max(active_subscription_count - 1, 0) + (1 if has_video_feature else 0),
+        }
+
+        limits_by_plan = {
+            "free": {"tokens": 50000, "images": 40, "videos": 2},
+            "pro": {"tokens": 1000000, "images": 600, "videos": 40},
+            "enterprise": {"tokens": None, "images": None, "videos": None},
+        }
+        limits = limits_by_plan.get(plan_tier, limits_by_plan["free"])
+
+        buckets = [
+            _build_usage_bucket(
+                key="tokens",
+                label="LLM Tokens",
+                used=usage_seed["tokens"],
+                limit=limits["tokens"],
+                unit="tokens",
+                reset_window="monthly",
+            ),
+            _build_usage_bucket(
+                key="images",
+                label="Image Generations",
+                used=usage_seed["images"],
+                limit=limits["images"],
+                unit="images",
+                reset_window="monthly",
+            ),
+            _build_usage_bucket(
+                key="videos",
+                label="Video Generations",
+                used=usage_seed["videos"],
+                limit=limits["videos"],
+                unit="videos",
+                reset_window="monthly",
+            ),
+        ]
+
+        return Response(
+            {
+                "period": "current_month",
+                "plan_tier": plan_tier,
+                "buckets": buckets,
+                "notes": [
+                    "Usage values are starter placeholders until you stream provider telemetry.",
+                    "Map entitlement keys to provider limits before production launch.",
+                    "Webhook-verified subscriptions should remain the billing source of truth.",
+                ],
+            }
+        )
 
 
 class SupabaseProfileView(APIView):
