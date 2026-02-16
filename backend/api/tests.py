@@ -7,6 +7,7 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.test import APIRequestFactory, APIClient
 
 from .authentication import ClerkJWTAuthentication
+from .clerk import authorized_party_matches
 from .models import Profile, Project
 from .supabase_client import _ensure_https
 from .views import extract_billing_features
@@ -105,6 +106,48 @@ class BillingFeaturesTests(SimpleTestCase):
     def test_normalizes_and_deduplicates_features(self):
         claims = {"entitlements": [" Pro ", "pro", "ANALYTICS", "analytics"]}
         self.assertEqual(extract_billing_features(claims), ["pro", "analytics"])
+
+
+class AuthorizedPartiesTests(SimpleTestCase):
+    def test_matches_exact_origin(self):
+        self.assertTrue(
+            authorized_party_matches(
+                "http://localhost:5173",
+                ["http://localhost:5173"],
+            )
+        )
+
+    def test_matches_with_trailing_slash(self):
+        self.assertTrue(
+            authorized_party_matches(
+                "http://localhost:5173",
+                ["http://localhost:5173/"],
+            )
+        )
+
+    def test_matches_loopback_aliases(self):
+        self.assertTrue(
+            authorized_party_matches(
+                "http://127.0.0.1:5173",
+                ["http://localhost:5173"],
+            )
+        )
+
+    def test_rejects_different_ports(self):
+        self.assertFalse(
+            authorized_party_matches(
+                "http://127.0.0.1:5173",
+                ["http://localhost:3000"],
+            )
+        )
+
+    def test_rejects_unlisted_non_loopback_host(self):
+        self.assertFalse(
+            authorized_party_matches(
+                "https://app.example.com",
+                ["https://admin.example.com"],
+            )
+        )
 
 
 class SupabaseUrlTests(SimpleTestCase):

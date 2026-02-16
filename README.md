@@ -98,7 +98,7 @@ Backend script applies migrations before starting. Frontend script installs `nod
 | `CLERK_JWKS_URL` | No | Defaults from `CLERK_DOMAIN` |
 | `CLERK_JWT_ISSUER` | No | Defaults from `CLERK_DOMAIN` |
 | `CLERK_JWT_AUDIENCE` | No | Optional JWT audience |
-| `CLERK_AUTHORIZED_PARTIES` | No | Optional allowed `azp` values |
+| `CLERK_AUTHORIZED_PARTIES` | No | Optional allowed `azp` values (include both `http://localhost:5173` and `http://127.0.0.1:5173` for local dev) |
 | `CLERK_BILLING_CLAIM` | No | Entitlements claim key (default: `entitlements`) |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Yes | Svix signing secret |
 | `SUPABASE_URL` | Yes | Supabase project URL |
@@ -139,6 +139,10 @@ Protected endpoints support:
 
 Django verifies tokens against Clerk JWKS with supported asymmetric algorithms.
 When using cookie auth on unsafe methods (`POST`, `PATCH`, `DELETE`, etc.), CSRF validation is required.
+
+If you see `Token authorized party is not allowed`, align these values:
+- Frontend URL you are actually using (`http://localhost:5173` vs `http://127.0.0.1:5173`)
+- `CLERK_AUTHORIZED_PARTIES` in `backend/.env`
 
 ## Billing and Entitlements
 
