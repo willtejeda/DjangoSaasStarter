@@ -138,63 +138,54 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
 }
 
 function MarketingHome({ onNavigate }) {
-  const stackItems = [
-    'Django + DRF API core',
-    'Clerk auth and billing',
-    'Webhook-first payment sync',
-    'Digital + service fulfillment'
-  ];
-
   const launchSteps = [
     {
-      title: 'Shape your offer',
-      body: 'Define one clear promise, one buyer segment, and one starter price.'
+      title: 'Boot the stack',
+      body: 'Run backend and frontend locally and verify /api/health responds.'
     },
     {
-      title: 'Turn on checkout',
-      body: 'Use Clerk pricing and checkout with local order creation in Django.'
+      title: 'Publish one offer',
+      body: 'Create one product and one default price using seller endpoints.'
     },
     {
-      title: 'Deliver automatically',
-      body: 'Fulfill downloads, bookings, and entitlements when payment is verified.'
+      title: 'Validate purchase flow',
+      body: 'Create an order and confirm fulfillment path using webhook-safe defaults.'
     },
     {
-      title: 'Scale with data',
-      body: 'Track paid conversions, active subscriptions, and retention features.'
+      title: 'Ship custom SaaS',
+      body: 'Replace copy, tune pricing, and keep payment confirmation server-side.'
     }
   ];
 
-  const promiseCards = [
+  const pathCards = [
     {
-      title: 'From idea to paid flow quickly',
-      body: 'You get catalog, checkout, subscriptions, and post-purchase pages without writing boilerplate.'
+      title: 'I want to evaluate fast',
+      body: 'Use the built-in product and pricing pages to see the full buyer journey quickly.',
+      points: ['Public catalog', 'Checkout path', 'Customer account pages'],
+      cta: 'Open Product Flow',
+      path: '/products'
     },
     {
-      title: 'Built for custom SaaS, not demos',
-      body: 'Start with a revenue-ready core, then customize offers, pages, and workflows to your niche.'
-    },
-    {
-      title: 'Safer payment lifecycle by default',
-      body: 'Payment confirmation is webhook-driven, so fulfillment logic stays server-side and auditable.'
+      title: 'I want to launch my SaaS',
+      body: 'Start with billing and plan structure, then map entitlements and fulfillment to your offer.',
+      points: ['Clerk billing integration', 'Entitlement mapping', 'Webhook-driven fulfillment'],
+      cta: 'Open Pricing Flow',
+      path: '/pricing'
     }
   ];
 
-  const comparisonRows = [
+  const capabilityGroups = [
     {
-      label: 'Checkout and payment truth',
-      win: 'Verified Clerk webhook events confirm orders before fulfillment.'
+      title: 'Revenue Core',
+      points: ['Orders and order items', 'Subscriptions and plan states', 'Payment transaction tracking']
     },
     {
-      label: 'Monetization surfaces',
-      win: 'One-time offers, recurring plans, and service bookings in one template.'
+      title: 'Fulfillment Core',
+      points: ['Digital download grants', 'Service booking requests', 'Entitlement lifecycle updates']
     },
     {
-      label: 'Customer operations',
-      win: 'Built-in pages for purchases, subscriptions, downloads, and bookings.'
-    },
-    {
-      label: 'Seller operations',
-      win: 'Authenticated APIs to manage products, prices, assets, and service offers.'
+      title: 'Operations Core',
+      points: ['Seller product management APIs', 'Customer account portal views', 'Deploy and test safety checks']
     }
   ];
 
@@ -203,30 +194,30 @@ function MarketingHome({ onNavigate }) {
       <header className="panel landing-hero">
         <div className="landing-grid">
           <div className="landing-copy">
-            <div className="landing-chip">Revenue-Ready SaaS Starter Repo</div>
-            <h1>Launch a monetized SaaS foundation in days, then shape it into your product.</h1>
+            <div className="landing-chip">DjangoStarter: SaaS Revenue Foundation</div>
+            <h1>Build a custom SaaS on top of a payment-ready starter, not a blank project.</h1>
             <p className="landing-subtitle">
-              DjangoStarter includes the paid product loop from day one: offers, checkout,
-              subscriptions, fulfillment, entitlements, and account management flows.
+              This starter includes the full paid loop from day one: catalog, pricing, checkout,
+              webhook-verified fulfillment, subscriptions, and customer account lifecycle pages.
             </p>
             <div className="landing-actions">
               <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Explore Live Offer Flow
+                Start with Product Flow
               </button>
               <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-                See Billing + Pricing
+                Start with Pricing Flow
               </button>
             </div>
-            <ul className="landing-signals">
-              <li>Production-minded payment flow contract</li>
-              <li>Seller APIs for fast catalog iteration</li>
-              <li>Customer dashboards for post-purchase retention</li>
-            </ul>
+            <div className="landing-proof">
+              <span>Webhook-first payment confirmation</span>
+              <span>Digital and service monetization</span>
+              <span>Seller and customer operations included</span>
+            </div>
           </div>
 
-          <aside className="landing-sidecard">
-            <p className="eyebrow">Execution Blueprint</p>
-            <h3>4 steps from template to first paying user</h3>
+          <aside className="landing-quickstart">
+            <p className="eyebrow">First 60 Minutes</p>
+            <h3>Use this order and skip chaos</h3>
             <ol className="landing-step-list">
               {launchSteps.map((step, index) => (
                 <li className="landing-step" key={step.title}>
@@ -238,54 +229,46 @@ function MarketingHome({ onNavigate }) {
                 </li>
               ))}
             </ol>
-            <div className="landing-kpis">
-              <article>
-                <p className="metric-label">Core APIs</p>
-                <h4>20+</h4>
-              </article>
-              <article>
-                <p className="metric-label">Revenue Modes</p>
-                <h4>3</h4>
-              </article>
-              <article>
-                <p className="metric-label">Default Focus</p>
-                <h4>Profit</h4>
-              </article>
+            <div className="landing-inline-cta">
+              <button type="button" className="button button-secondary" onClick={() => onNavigate('/products')}>
+                Run the Flow
+              </button>
             </div>
           </aside>
         </div>
       </header>
 
-      <section className="panel landing-stack">
-        {stackItems.map((item) => (
-          <div className="landing-stack-item" key={item}>
-            {item}
-          </div>
-        ))}
-      </section>
-
       <section className="panel">
-        <h2>Why this starter converts better than most templates</h2>
-        <p className="helper-text">
-          The point is not a pretty dashboard. The point is reaching paid customer behavior faster.
-        </p>
-        <div className="landing-promise-grid">
-          {promiseCards.map((card) => (
-            <article className="landing-promise-card" key={card.title}>
+        <h2>Pick your starting path</h2>
+        <div className="landing-path-grid">
+          {pathCards.map((card) => (
+            <article className="landing-path-card" key={card.title}>
               <h3>{card.title}</h3>
               <p>{card.body}</p>
+              <ul className="check-grid">
+                {card.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+              <button type="button" className="button button-primary" onClick={() => onNavigate(card.path)}>
+                {card.cta}
+              </button>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="panel landing-compare">
-        <h2>What is already wired for your custom SaaS</h2>
-        <div className="landing-compare-grid">
-          {comparisonRows.map((row) => (
-            <article className="landing-compare-row" key={row.label}>
-              <p className="landing-compare-label">{row.label}</p>
-              <p>{row.win}</p>
+      <section className="panel">
+        <h2>What ships out of the box</h2>
+        <div className="landing-capability-grid">
+          {capabilityGroups.map((group) => (
+            <article className="landing-capability-card" key={group.title}>
+              <h3>{group.title}</h3>
+              <ul className="check-grid">
+                {group.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
             </article>
           ))}
         </div>
@@ -293,10 +276,10 @@ function MarketingHome({ onNavigate }) {
 
       <section className="panel landing-final">
         <div>
-          <p className="eyebrow">Ship Faster</p>
-          <h2>Use this repo as your paid SaaS base, then customize only what drives conversion.</h2>
+          <p className="eyebrow">Fast Path</p>
+          <h2>Focus on offer and distribution. Keep checkout, fulfillment, and account ops already handled.</h2>
           <p className="helper-text">
-            Keep the default revenue rails, adapt the offer and messaging, and start validating with real buyers.
+            This template is built to remove plumbing work so your team can validate paid demand faster.
           </p>
         </div>
         <div className="landing-final-actions">
@@ -304,16 +287,13 @@ function MarketingHome({ onNavigate }) {
             Open Product Experience
           </button>
           <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-            Launch Pricing Page
-          </button>
-          <button type="button" className="button button-ghost" onClick={() => onNavigate('/app')}>
-            View Account App
+            Open Pricing + Billing
           </button>
         </div>
         <ul className="check-grid">
-          <li>Test one-time purchase flow</li>
-          <li>Test subscription upgrade flow</li>
-          <li>Test webhook-driven fulfillment flow</li>
+          <li>Start with one paid offer</li>
+          <li>Measure conversion before expanding scope</li>
+          <li>Use webhook verification for production payment truth</li>
         </ul>
       </section>
     </>
