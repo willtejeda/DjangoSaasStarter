@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -226,6 +228,118 @@ def _fulfill_order(order: Order) -> Order:
     # Best-effort transactional email. Purchase flow should not fail if email delivery fails.
     send_order_fulfilled_email(order)
     return order
+
+
+def _order_confirm_secret_valid(request) -> bool:
+    expected_secret = str(getattr(settings, "ORDER_CONFIRM_SHARED_SECRET", "") or "").strip()
+    if not expected_secret:
+        return True
+
+    provided_secret = str(request.headers.get("X-Order-Confirm-Secret", "") or "").strip()
+    return bool(provided_secret) and secrets.compare_digest(provided_secret, expected_secret)
+
+
+def confirm_order_payment(
+    order: Order,
+    *,
+    provider: str,
+    external_id: str = "",
+    clerk_checkout_id: str = "",
+    raw_payload: dict[str, Any] | None = None,
+) -> tuple[Order, bool]:
+    if order.status in {Order.Status.CANCELED, Order.Status.REFUNDED}:
+        raise ValidationError("Cannot confirm a canceled or refunded order.")
+
+    if order.status in {Order.Status.PAID, Order.Status.FULFILLED}:
+        if order.status == Order.Status.PAID:
+            order = _fulfill_order(order)
+        return order, True
+
+    raw_payload = raw_payload if isinstance(raw_payload, dict) else {}
+    external_id = _safe_str(external_id)
+    clerk_checkout_id = _safe_str(clerk_checkout_id)
+
+    now = django_timezone.now()
+    order.status = Order.Status.PAID
+    order.paid_at = order.paid_at or now
+    if clerk_checkout_id and not order.clerk_checkout_id:
+        order.clerk_checkout_id = clerk_checkout_id
+    if external_id and not order.external_reference:
+        order.external_reference = external_id
+    order.save(
+        update_fields=[
+            "status",
+            "paid_at",
+            "clerk_checkout_id",
+            "external_reference",
+            "updated_at",
+        ]
+    )
+
+    if external_id:
+        PaymentTransaction.objects.update_or_create(
+            provider=provider,
+            external_id=external_id,
+            order=order,
+            defaults={
+                "subscription": None,
+                "status": PaymentTransaction.Status.SUCCEEDED,
+                "amount_cents": order.total_cents,
+                "currency": order.currency,
+                "raw_payload": raw_payload,
+            },
+        )
+    else:
+        PaymentTransaction.objects.create(
+            order=order,
+            provider=provider,
+            status=PaymentTransaction.Status.SUCCEEDED,
+            amount_cents=order.total_cents,
+            currency=order.currency,
+            raw_payload=raw_payload,
+        )
+
+    recurring_items = [
+        item
+        for item in order.items.select_related("product", "price")
+        if item.price and item.price.billing_period in {Price.BillingPeriod.MONTHLY, Price.BillingPeriod.YEARLY}
+    ]
+
+    for index, item in enumerate(recurring_items):
+        existing_subscription = Subscription.objects.filter(
+            customer_account=order.customer_account,
+            price=item.price,
+            metadata__order_public_id=str(order.public_id),
+            metadata__order_item_id=item.id,
+        ).exists()
+        if existing_subscription:
+            continue
+
+        period_start = now
+        period_end = _billing_period_end(period_start, item.price.billing_period)
+
+        subscription_id = None
+        if provider == PaymentTransaction.Provider.CLERK and external_id and index == 0:
+            if not Subscription.objects.filter(clerk_subscription_id=external_id).exists():
+                subscription_id = external_id
+
+        Subscription.objects.create(
+            customer_account=order.customer_account,
+            product=item.product,
+            price=item.price,
+            status=Subscription.Status.ACTIVE,
+            clerk_subscription_id=subscription_id,
+            current_period_start=period_start,
+            current_period_end=period_end,
+            metadata={
+                "order_public_id": str(order.public_id),
+                "order_item_id": item.id,
+                "quantity": item.quantity,
+            },
+        )
+
+    order = _fulfill_order(order)
+    return order, False
 
 
 class HealthView(APIView):
@@ -452,6 +566,7 @@ class AccountOrderListView(generics.ListAPIView):
 
 class AccountOrderCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "checkout_create"
 
     @transaction.atomic
     def post(self, request):
@@ -507,12 +622,15 @@ class AccountOrderCreateView(APIView):
 
 class AccountOrderConfirmView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "order_confirm"
 
     @transaction.atomic
     def post(self, request, public_id):
         account = get_request_customer_account(request)
         order = get_object_or_404(
-            Order.objects.select_related("customer_account").prefetch_related("items__product", "items__price"),
+            Order.objects.select_for_update()
+            .select_related("customer_account")
+            .prefetch_related("items__product", "items__price"),
             public_id=public_id,
             customer_account=account,
         )
@@ -520,80 +638,55 @@ class AccountOrderConfirmView(APIView):
         serializer = OrderConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        if order.status in {Order.Status.CANCELED, Order.Status.REFUNDED}:
-            return Response({"detail": "Cannot confirm a canceled or refunded order."}, status=400)
-
-        if order.status in {Order.Status.PAID, Order.Status.FULFILLED}:
-            if order.status == Order.Status.PAID:
-                order = _fulfill_order(order)
-            return Response({"order": OrderSerializer(order).data, "already_confirmed": True})
-
         provider = serializer.validated_data["provider"]
         external_id = _safe_str(serializer.validated_data.get("external_id"))
         clerk_checkout_id = _safe_str(serializer.validated_data.get("clerk_checkout_id"))
         raw_payload = _safe_dict(serializer.validated_data.get("raw_payload"))
 
-        now = django_timezone.now()
-        order.status = Order.Status.PAID
-        order.paid_at = now
-        if clerk_checkout_id:
-            order.clerk_checkout_id = clerk_checkout_id
-        if external_id:
-            order.external_reference = external_id
-        order.save(update_fields=["status", "paid_at", "clerk_checkout_id", "external_reference", "updated_at"])
+        if order.status == Order.Status.PENDING_PAYMENT:
+            if provider == PaymentTransaction.Provider.MANUAL and not settings.ORDER_CONFIRM_ALLOW_MANUAL:
+                return Response(
+                    {
+                        "detail": (
+                            "Manual order confirmation is disabled. "
+                            "Set ORDER_CONFIRM_ALLOW_MANUAL=True for controlled development use."
+                        )
+                    },
+                    status=403,
+                )
+            if (
+                provider == PaymentTransaction.Provider.CLERK
+                and not settings.ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM
+            ):
+                return Response(
+                    {
+                        "detail": (
+                            "Direct client-side Clerk confirmation is disabled. "
+                            "Wait for a verified payment webhook to mark this order paid."
+                        ),
+                        "pending_verification": True,
+                    },
+                    status=409,
+                )
+            if not _order_confirm_secret_valid(request):
+                return Response(
+                    {
+                        "detail": (
+                            "Invalid order confirmation secret. "
+                            "Pass X-Order-Confirm-Secret with a valid server-side value."
+                        )
+                    },
+                    status=403,
+                )
 
-        if external_id:
-            PaymentTransaction.objects.update_or_create(
-                provider=provider,
-                external_id=external_id,
-                order=order,
-                defaults={
-                    "subscription": None,
-                    "status": PaymentTransaction.Status.SUCCEEDED,
-                    "amount_cents": order.total_cents,
-                    "currency": order.currency,
-                    "raw_payload": raw_payload,
-                },
-            )
-        else:
-            PaymentTransaction.objects.create(
-                order=order,
-                provider=provider,
-                status=PaymentTransaction.Status.SUCCEEDED,
-                amount_cents=order.total_cents,
-                currency=order.currency,
-                raw_payload=raw_payload,
-            )
-
-        recurring_items = [
-            item
-            for item in order.items.select_related("product", "price")
-            if item.price
-            and item.price.billing_period in {Price.BillingPeriod.MONTHLY, Price.BillingPeriod.YEARLY}
-        ]
-
-        for index, item in enumerate(recurring_items):
-            period_start = now
-            period_end = _billing_period_end(period_start, item.price.billing_period)
-
-            subscription_id = None
-            if provider == PaymentTransaction.Provider.CLERK and external_id and index == 0:
-                if not Subscription.objects.filter(clerk_subscription_id=external_id).exists():
-                    subscription_id = external_id
-
-            Subscription.objects.create(
-                customer_account=account,
-                product=item.product,
-                price=item.price,
-                status=Subscription.Status.ACTIVE,
-                clerk_subscription_id=subscription_id,
-                current_period_start=period_start,
-                current_period_end=period_end,
-                metadata={"order_public_id": str(order.public_id), "quantity": item.quantity},
-            )
-
-        order = _fulfill_order(order)
-        return Response({"order": OrderSerializer(order).data, "already_confirmed": False})
+        order, already_confirmed = confirm_order_payment(
+            order,
+            provider=provider,
+            external_id=external_id,
+            clerk_checkout_id=clerk_checkout_id,
+            raw_payload=raw_payload,
+        )
+        return Response({"order": OrderSerializer(order).data, "already_confirmed": already_confirmed})
 
 
 class AccountSubscriptionListView(generics.ListAPIView):
@@ -637,6 +730,7 @@ class AccountDownloadGrantListView(generics.ListAPIView):
 
 class AccountDownloadAccessView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "download_access"
 
     def post(self, request, token):
         account = get_request_customer_account(request)

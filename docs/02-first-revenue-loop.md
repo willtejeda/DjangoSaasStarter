@@ -1,0 +1,137 @@
+# 02 First Revenue Loop
+
+Goal: publish one offer and complete one end-to-end purchase flow.
+
+This is the fastest path to prove your stack can make money.
+
+## 1. Seed a published product and price
+
+Run this from backend:
+
+```bash
+cd ./backend
+source .venv/bin/activate
+python3 manage.py shell <<'PY'
+from api.models import Price, Product, Profile
+
+owner, _ = Profile.objects.get_or_create(
+    clerk_user_id="seller_demo_owner",
+    defaults={"email": "seller@example.com", "first_name": "Demo", "last_name": "Seller"},
+)
+
+product, _ = Product.objects.get_or_create(
+    owner=owner,
+    slug="focus-sprint-kit",
+    defaults={
+        "name": "Focus Sprint Kit",
+        "tagline": "Plan your week in 20 minutes.",
+        "description": "Templates and checklists for weekly planning and execution.",
+        "product_type": Product.ProductType.DIGITAL,
+        "visibility": Product.Visibility.PUBLISHED,
+        "feature_keys": ["focus_sprint"],
+    },
+)
+
+price, _ = Price.objects.get_or_create(
+    product=product,
+    name="Starter",
+    defaults={
+        "amount_cents": 2900,
+        "currency": "USD",
+        "billing_period": Price.BillingPeriod.ONE_TIME,
+        "is_active": True,
+        "is_default": True,
+        "metadata": {},
+    },
+)
+
+if not price.is_default:
+    price.is_default = True
+    price.save(update_fields=["is_default", "updated_at"])
+
+if product.active_price_id != price.id:
+    product.active_price = price
+    product.save(update_fields=["active_price", "updated_at"])
+
+print({"product_id": product.id, "price_id": price.id, "slug": product.slug})
+PY
+```
+
+Verify the catalog:
+
+```bash
+curl http://127.0.0.1:8000/api/products/
+```
+
+You should see `focus-sprint-kit` in the response.
+
+## 2. Enable local manual checkout simulation
+
+This is for local development only.
+
+Set in `backend/.env`:
+
+```bash
+ORDER_CONFIRM_ALLOW_MANUAL=True
+```
+
+Set in `frontend/.env`:
+
+```bash
+VITE_ENABLE_DEV_MANUAL_CHECKOUT=true
+```
+
+Restart backend and frontend.
+
+## 3. Complete a test purchase in UI
+
+1. Open `http://127.0.0.1:5173/products`
+2. Sign in with Clerk
+3. Open the seeded product
+4. Click `Buy Now`
+5. You should land on `/checkout/success`
+
+What just happened:
+
+- Frontend called `POST /api/account/orders/create/`
+- Frontend called `POST /api/account/orders/<public_id>/confirm/` with `provider=manual`
+- Backend marked order paid, fulfilled it, and created entitlements
+
+## 4. Verify purchase data in DB
+
+```bash
+cd ./backend
+source .venv/bin/activate
+python3 manage.py shell <<'PY'
+from api.models import Entitlement, Order
+
+latest = Order.objects.order_by("-created_at").prefetch_related("items").first()
+if not latest:
+    print("No orders found")
+else:
+    print({
+        "order": str(latest.public_id),
+        "status": latest.status,
+        "total_cents": latest.total_cents,
+        "items": latest.items.count(),
+    })
+
+entitlements = Entitlement.objects.order_by("-created_at")[:5]
+print("recent_entitlements", [e.feature_key for e in entitlements])
+PY
+```
+
+## 5. Production safety reset
+
+Before real deployment, set these back:
+
+```bash
+# backend/.env
+ORDER_CONFIRM_ALLOW_MANUAL=False
+ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False
+
+# frontend/.env
+VITE_ENABLE_DEV_MANUAL_CHECKOUT=false
+```
+
+Production should rely on verified Clerk webhooks for payment confirmation.

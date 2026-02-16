@@ -1,3 +1,4 @@
+import secrets
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -10,8 +11,13 @@ def get_csv(name: str, default: str = "") -> list[str]:
     return [item for item in config(name, cast=Csv(), default=default) if item]
 
 
-SECRET_KEY = config("DJANGO_SECRET_KEY", default="change-me-before-production")
-DEBUG = config("DJANGO_DEBUG", cast=bool, default=True)
+DEBUG = config("DJANGO_DEBUG", cast=bool, default=False)
+SECRET_KEY = config("DJANGO_SECRET_KEY", default="")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = secrets.token_urlsafe(64)
+    else:
+        raise ValueError("DJANGO_SECRET_KEY must be configured when DJANGO_DEBUG is False.")
 ALLOWED_HOSTS = get_csv("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1")
 
 INSTALLED_APPS = [
@@ -152,6 +158,18 @@ CSRF_TRUSTED_ORIGINS = get_csv("CSRF_TRUSTED_ORIGINS")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("api.authentication.ClerkJWTAuthentication",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": config("DRF_THROTTLE_ANON", default="120/min"),
+        "user": config("DRF_THROTTLE_USER", default="1500/hour"),
+        "checkout_create": config("DRF_THROTTLE_CHECKOUT_CREATE", default="60/hour"),
+        "order_confirm": config("DRF_THROTTLE_ORDER_CONFIRM", default="60/hour"),
+        "download_access": config("DRF_THROTTLE_DOWNLOAD_ACCESS", default="180/hour"),
+    },
 }
 
 CLERK_DOMAIN = config("CLERK_DOMAIN", default="")
@@ -194,3 +212,52 @@ RESEND_API_KEY = config("RESEND_API_KEY", default="")
 RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="")
 RESEND_REPLY_TO_EMAIL = config("RESEND_REPLY_TO_EMAIL", default="")
 RESEND_TIMEOUT_SECONDS = config("RESEND_TIMEOUT_SECONDS", cast=int, default=10)
+
+# Order confirmation controls.
+# Keep client-side payment confirmation disabled by default; rely on verified webhooks.
+ORDER_CONFIRM_ALLOW_MANUAL = config("ORDER_CONFIRM_ALLOW_MANUAL", cast=bool, default=False)
+ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM = config(
+    "ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM",
+    cast=bool,
+    default=False,
+)
+ORDER_CONFIRM_SHARED_SECRET = config("ORDER_CONFIRM_SHARED_SECRET", default="")
+
+# Production security defaults.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_HSTS_SECONDS = config(
+    "DJANGO_SECURE_HSTS_SECONDS",
+    cast=int,
+    default=0 if DEBUG else 31536000,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    cast=bool,
+    default=not DEBUG,
+)
+SECURE_HSTS_PRELOAD = config(
+    "DJANGO_SECURE_HSTS_PRELOAD",
+    cast=bool,
+    default=not DEBUG,
+)
+SECURE_SSL_REDIRECT = config(
+    "DJANGO_SECURE_SSL_REDIRECT",
+    cast=bool,
+    default=not DEBUG,
+)
+SESSION_COOKIE_SECURE = config(
+    "DJANGO_SESSION_COOKIE_SECURE",
+    cast=bool,
+    default=not DEBUG,
+)
+CSRF_COOKIE_SECURE = config(
+    "DJANGO_CSRF_COOKIE_SECURE",
+    cast=bool,
+    default=not DEBUG,
+)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = config(
+    "DJANGO_SECURE_REFERRER_POLICY",
+    default="strict-origin-when-cross-origin",
+)
+X_FRAME_OPTIONS = config("DJANGO_X_FRAME_OPTIONS", default="DENY")

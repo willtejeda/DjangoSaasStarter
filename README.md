@@ -105,6 +105,12 @@ cd frontend && ./start.sh
 | `DJANGO_SECRET_KEY` | Yes | Django secret key |
 | `DJANGO_DEBUG` | No | `True` for local development |
 | `DJANGO_ALLOWED_HOSTS` | No | Comma-separated hosts |
+| `DJANGO_SECURE_SSL_REDIRECT` | No | Force HTTPS redirects (`True` recommended in production) |
+| `DJANGO_SECURE_HSTS_SECONDS` | No | HSTS max age in seconds (`31536000` in production) |
+| `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | Include subdomains for HSTS in production |
+| `DJANGO_SECURE_HSTS_PRELOAD` | No | Enable HSTS preload flag in production |
+| `DJANGO_SESSION_COOKIE_SECURE` | No | Secure-only session cookies in production |
+| `DJANGO_CSRF_COOKIE_SECURE` | No | Secure-only CSRF cookies in production |
 | `DATABASE_URL` | No | Optional DB URL (`postgresql://...` or `sqlite:///...`) |
 | `DB_NAME` | No | Used when `DATABASE_URL` is not set |
 | `DB_USER` | No | Used when `DATABASE_URL` is not set |
@@ -121,6 +127,9 @@ cd frontend && ./start.sh
 | `CLERK_AUTHORIZED_PARTIES` | No | Optional allowed `azp` values |
 | `CLERK_BILLING_CLAIM` | No | Entitlements claim key (`entitlements` default) |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Yes | Svix signing secret |
+| `ORDER_CONFIRM_ALLOW_MANUAL` | No | Allow manual payment confirmation endpoint (development only) |
+| `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM` | No | Allow direct client-side Clerk confirmation endpoint (development only) |
+| `ORDER_CONFIRM_SHARED_SECRET` | No | Optional `X-Order-Confirm-Secret` value for any direct confirmation call |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only Supabase key |
@@ -136,6 +145,11 @@ cd frontend && ./start.sh
 | `RESEND_FROM_EMAIL` | No | Verified sender identity for outbound emails (`Name <email@domain>`) |
 | `RESEND_REPLY_TO_EMAIL` | No | Optional reply-to email address |
 | `RESEND_TIMEOUT_SECONDS` | No | Outbound request timeout for Resend API calls (default `10`) |
+| `DRF_THROTTLE_ANON` | No | Default anonymous API throttle rate |
+| `DRF_THROTTLE_USER` | No | Default authenticated API throttle rate |
+| `DRF_THROTTLE_CHECKOUT_CREATE` | No | Throttle for `POST /api/account/orders/create/` |
+| `DRF_THROTTLE_ORDER_CONFIRM` | No | Throttle for `POST /api/account/orders/<public_id>/confirm/` |
+| `DRF_THROTTLE_DOWNLOAD_ACCESS` | No | Throttle for `POST /api/account/downloads/<token>/access/` |
 
 ### Frontend (`frontend/.env`)
 
@@ -144,6 +158,7 @@ cd frontend && ./start.sh
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key |
 | `VITE_API_BASE_URL` | Yes | Django API base URL (`http://127.0.0.1:8000/api`) |
 | `VITE_CLERK_BILLING_PORTAL_URL` | No | Optional direct billing portal link |
+| `VITE_ENABLE_DEV_MANUAL_CHECKOUT` | No | Development-only manual fallback when no checkout URL is configured |
 
 ## Resend Transactional Email Setup
 
@@ -229,8 +244,25 @@ This starter handles:
 
 - `user.created`, `user.updated`, `user.deleted`
 - `billing.subscription.created`, `billing.subscription.updated`, `billing.subscription.active`, `billing.subscription.paused`, `billing.subscription.canceled`
+- `paymentAttempt.created`, `paymentAttempt.updated`
+- `checkout.created`, `checkout.updated`
 
 Webhook events are also saved to local `WebhookEvent` for idempotency and audit history.
+
+### Step 7: Link Clerk payment events to local orders
+
+To let webhooks confirm one-time purchases automatically, include local order metadata in your Clerk checkout/payment flow:
+
+- `order_public_id` = local Django `Order.public_id`
+
+Webhook handlers try multiple fields, but `order_public_id` is the most reliable mapping key.
+
+## Checkout and Fulfillment Security
+
+- Production default is webhook-first payment confirmation.
+- Direct client-side order confirmation is disabled by default.
+- Manual confirmation is disabled by default.
+- If you must enable direct confirmation for development, gate it with `ORDER_CONFIRM_SHARED_SECRET` and never expose that secret in frontend code.
 
 ## Commerce Model Map
 
@@ -359,11 +391,21 @@ Django verifies tokens against Clerk JWKS and enforces CSRF checks for cookie-au
 From `backend/`:
 
 ```bash
-python3 manage.py test api -v2
+python3 manage.py test api -v2 --noinput
 ```
 
 If your default DB points at remote Postgres, run tests with local SQLite:
 
 ```bash
-DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2
+DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2 --noinput
 ```
+
+## Deployment Notes
+
+- Frontend SPA rewrites:
+  - Vercel config at `frontend/vercel.json`
+  - Netlify config at `frontend/netlify.toml`
+- CI workflow at `.github/workflows/ci.yml` runs:
+  - Django deploy checks
+  - Django API tests
+  - Frontend production build

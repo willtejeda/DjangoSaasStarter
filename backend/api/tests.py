@@ -13,6 +13,7 @@ from .models import (
     DownloadGrant,
     Entitlement,
     Order,
+    PaymentTransaction,
     Price,
     Product,
     Profile,
@@ -26,6 +27,8 @@ from .webhooks import (
     ClerkWebhookView,
     WebhookVerificationError,
     _verify_webhook,
+    handle_billing_checkout_upsert,
+    handle_billing_payment_attempt_upsert,
     handle_user_created,
     handle_user_deleted,
 )
@@ -396,6 +399,10 @@ class ProjectModelValidationTests(TestCase):
             Project.objects.create(owner=owner, name="   ", slug="")
 
 
+@override_settings(
+    ORDER_CONFIRM_ALLOW_MANUAL=True,
+    ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=True,
+)
 class CommerceApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -465,6 +472,38 @@ class CommerceApiTests(TestCase):
         buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
         grant = DownloadGrant.objects.get(customer_account=buyer_profile.customer_account, asset=asset)
         return buyer_profile.customer_account, grant, asset
+
+    def _create_pending_order(self, *, amount_cents: int = 4900):
+        owner = Profile.objects.create(
+            clerk_user_id=f"seller_pending_{Product.objects.count() + 1}",
+            email=f"seller-pending-{Product.objects.count() + 1}@example.com",
+        )
+        product = Product.objects.create(
+            owner=owner,
+            name=f"Pending Offer {Product.objects.count() + 1}",
+            slug=f"pending-offer-{Product.objects.count() + 1}",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+            feature_keys=["priority_support"],
+        )
+        price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=amount_cents,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+        return Order.objects.get(public_id=public_id)
 
     def test_public_catalog_only_returns_published_products(self):
         owner = Profile.objects.create(clerk_user_id="seller_1", email="seller@example.com")
@@ -703,3 +742,148 @@ class CommerceApiTests(TestCase):
         subscription = Subscription.objects.get(clerk_subscription_id="sub_clerk_123")
         self.assertEqual(subscription.status, Subscription.Status.ACTIVE)
         self.assertEqual(subscription.price_id, price.id)
+
+    def test_payment_attempt_webhook_fulfills_pending_order(self):
+        order = self._create_pending_order()
+
+        handle_billing_payment_attempt_upsert(
+            {
+                "id": "pay_attempt_123",
+                "status": "succeeded",
+                "checkout_id": "checkout_abc",
+                "metadata": {"order_public_id": str(order.public_id)},
+            }
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.FULFILLED)
+        self.assertEqual(order.clerk_checkout_id, "checkout_abc")
+        self.assertEqual(order.external_reference, "pay_attempt_123")
+        self.assertTrue(
+            PaymentTransaction.objects.filter(
+                provider=PaymentTransaction.Provider.CLERK,
+                external_id="pay_attempt_123",
+                order=order,
+                status=PaymentTransaction.Status.SUCCEEDED,
+            ).exists()
+        )
+
+    def test_checkout_webhook_fulfills_pending_order(self):
+        order = self._create_pending_order(amount_cents=7900)
+
+        handle_billing_checkout_upsert(
+            {
+                "id": "checkout_xyz",
+                "status": "completed",
+                "metadata": {"order_public_id": str(order.public_id)},
+            }
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.FULFILLED)
+        self.assertEqual(order.clerk_checkout_id, "checkout_xyz")
+        self.assertEqual(order.external_reference, "checkout_xyz")
+        self.assertTrue(
+            PaymentTransaction.objects.filter(
+                provider=PaymentTransaction.Provider.CLERK,
+                external_id="checkout_xyz",
+                order=order,
+                status=PaymentTransaction.Status.SUCCEEDED,
+            ).exists()
+        )
+
+    def test_failed_payment_attempt_webhook_does_not_fulfill_order(self):
+        order = self._create_pending_order()
+
+        handle_billing_payment_attempt_upsert(
+            {
+                "id": "pay_attempt_failed",
+                "status": "failed",
+                "metadata": {"order_public_id": str(order.public_id)},
+            }
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
+        self.assertTrue(
+            PaymentTransaction.objects.filter(
+                provider=PaymentTransaction.Provider.CLERK,
+                external_id="pay_attempt_failed",
+                order=order,
+                status=PaymentTransaction.Status.FAILED,
+            ).exists()
+        )
+
+
+@override_settings(
+    ORDER_CONFIRM_ALLOW_MANUAL=False,
+    ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM=False,
+)
+class OrderConfirmSecurityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.auth_headers = {"HTTP_AUTHORIZATION": "Bearer unit-test-token"}
+        self.claims = {
+            "sub": "buyer_security_1",
+            "email": "security@example.com",
+            "given_name": "Secure",
+            "family_name": "Buyer",
+            "entitlements": ["free"],
+        }
+
+        owner = Profile.objects.create(clerk_user_id="seller_security_1", email="seller-security@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Security Offer",
+            slug="security-offer",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        self.price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=3300,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+    def _request(self, method: str, path: str, data=None):
+        with patch("api.authentication.decode_clerk_token", return_value=self.claims):
+            handler = getattr(self.client, method)
+            return handler(path, data=data, format="json", **self.auth_headers)
+
+    def test_manual_confirm_disabled_by_default(self):
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": self.price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        public_id = create_response.data["order"]["public_id"]
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_manual"},
+        )
+        self.assertEqual(confirm_response.status_code, 403)
+        self.assertTrue(confirm_response.data["detail"].startswith("Manual order confirmation is disabled"))
+
+    def test_direct_clerk_confirm_disabled_by_default(self):
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": self.price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        public_id = create_response.data["order"]["public_id"]
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "clerk", "external_id": "pay_direct"},
+        )
+        self.assertEqual(confirm_response.status_code, 409)
+        self.assertTrue(confirm_response.data["pending_verification"])

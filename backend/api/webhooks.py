@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone as django_timezone
@@ -15,9 +18,21 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
 from .billing import extract_billing_features, infer_plan_tier
-from .models import CustomerAccount, Entitlement, Price, Profile, Subscription, WebhookEvent
+from .models import (
+    CustomerAccount,
+    Entitlement,
+    Order,
+    PaymentTransaction,
+    Price,
+    Profile,
+    Subscription,
+    WebhookEvent,
+)
 
 logger = logging.getLogger(__name__)
+UUID_PATTERN = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
 
 
 class WebhookVerificationError(RuntimeError):
@@ -215,6 +230,166 @@ def _find_price_from_clerk_ids(data: dict[str, Any]) -> Price | None:
     if plan_id:
         return queryset.filter(clerk_plan_id=plan_id).first()
 
+    return None
+
+
+def _normalize_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_uuid(value: Any) -> str:
+    raw = _normalize_text(value)
+    if not raw:
+        return ""
+    try:
+        return str(UUID(raw))
+    except ValueError:
+        match = UUID_PATTERN.search(raw)
+        if not match:
+            return ""
+        try:
+            return str(UUID(match.group(0)))
+        except ValueError:
+            return ""
+
+
+def _iter_nested_dicts(data: dict[str, Any]):
+    if not isinstance(data, dict):
+        return
+
+    queue: list[dict[str, Any]] = [data]
+    seen_ids: set[int] = set()
+    while queue:
+        current = queue.pop(0)
+        marker = id(current)
+        if marker in seen_ids:
+            continue
+        seen_ids.add(marker)
+        yield current
+
+        for value in current.values():
+            if isinstance(value, dict):
+                queue.append(value)
+
+
+def _extract_first_value(data: dict[str, Any], candidate_keys: list[str]) -> str:
+    normalized_keys = {key.lower() for key in candidate_keys}
+    for row in _iter_nested_dicts(data):
+        for key, value in row.items():
+            if str(key).strip().lower() not in normalized_keys:
+                continue
+            normalized = _normalize_text(value)
+            if normalized:
+                return normalized
+    return ""
+
+
+def _extract_order_public_id(data: dict[str, Any]) -> str:
+    raw = _extract_first_value(
+        data,
+        [
+            "order_public_id",
+            "orderPublicId",
+            "order_id",
+            "orderId",
+            "order_reference",
+            "orderReference",
+            "order",
+        ],
+    )
+    return _normalize_uuid(raw)
+
+
+def _extract_checkout_id(data: dict[str, Any]) -> str:
+    return _extract_first_value(
+        data,
+        [
+            "checkout_id",
+            "checkoutId",
+            "clerk_checkout_id",
+            "checkout_session_id",
+            "checkoutSessionId",
+            "session_id",
+            "sessionId",
+        ],
+    )
+
+
+def _extract_payment_external_id(data: dict[str, Any]) -> str:
+    return _extract_first_value(
+        data,
+        [
+            "payment_attempt_id",
+            "paymentAttemptId",
+            "payment_id",
+            "paymentId",
+            "external_id",
+            "externalId",
+            "id",
+        ],
+    )
+
+
+def _extract_payment_status(data: dict[str, Any]) -> str:
+    return _extract_first_value(
+        data,
+        [
+            "status",
+            "payment_status",
+            "paymentStatus",
+            "checkout_status",
+            "checkoutStatus",
+            "state",
+        ],
+    ).lower()
+
+
+def _is_success_status(raw_status: str) -> bool:
+    return raw_status in {"succeeded", "success", "paid", "complete", "completed", "captured", "settled"}
+
+
+def _is_failed_status(raw_status: str) -> bool:
+    return raw_status in {"failed", "failure", "canceled", "cancelled", "voided", "refunded", "expired"}
+
+
+def _map_payment_transaction_status(raw_status: str) -> str:
+    if _is_success_status(raw_status):
+        return PaymentTransaction.Status.SUCCEEDED
+    if _is_failed_status(raw_status):
+        return PaymentTransaction.Status.FAILED
+    return PaymentTransaction.Status.PENDING
+
+
+def _resolve_order_from_payment_payload(data: dict[str, Any]) -> Order | None:
+    order_public_id = _extract_order_public_id(data)
+    if order_public_id:
+        return (
+            Order.objects.select_for_update()
+            .select_related("customer_account")
+            .prefetch_related("items__product", "items__price")
+            .filter(public_id=order_public_id)
+            .first()
+        )
+
+    checkout_id = _extract_checkout_id(data)
+    if checkout_id:
+        return (
+            Order.objects.select_for_update()
+            .select_related("customer_account")
+            .prefetch_related("items__product", "items__price")
+            .filter(clerk_checkout_id=checkout_id)
+            .first()
+        )
+
+    external_id = _extract_payment_external_id(data)
+    if external_id:
+        return (
+            Order.objects.select_for_update()
+            .select_related("customer_account")
+            .prefetch_related("items__product", "items__price")
+            .filter(external_reference=external_id)
+            .first()
+        )
     return None
 
 
@@ -433,6 +608,96 @@ def handle_billing_subscription_canceled(data: dict[str, Any]) -> None:
         _sync_plan_entitlements(account, [], source_reference=source_reference, active=False)
 
 
+def _upsert_payment_transaction_for_payload(
+    *,
+    order: Order,
+    provider: str,
+    external_id: str,
+    raw_status: str,
+    payload: dict[str, Any],
+) -> None:
+    transaction_status = _map_payment_transaction_status(raw_status)
+    defaults = {
+        "subscription": None,
+        "status": transaction_status,
+        "amount_cents": order.total_cents,
+        "currency": order.currency,
+        "raw_payload": payload if isinstance(payload, dict) else {},
+    }
+
+    if external_id:
+        PaymentTransaction.objects.update_or_create(
+            provider=provider,
+            external_id=external_id,
+            order=order,
+            defaults=defaults,
+        )
+        return
+
+    PaymentTransaction.objects.create(
+        order=order,
+        provider=provider,
+        external_id="",
+        **defaults,
+    )
+
+
+def _confirm_order_from_payment_payload(
+    data: dict[str, Any],
+    *,
+    fallback_checkout_id: str = "",
+) -> None:
+    if not isinstance(data, dict):
+        return
+
+    raw_status = _extract_payment_status(data)
+    checkout_id = _extract_checkout_id(data) or _normalize_text(fallback_checkout_id)
+    external_id = _extract_payment_external_id(data) or checkout_id
+
+    with transaction.atomic():
+        order = _resolve_order_from_payment_payload(data)
+        if order is None:
+            logger.warning(
+                "Skipping payment webhook sync: could not resolve order for payment payload id=%s checkout=%s",
+                external_id,
+                checkout_id,
+            )
+            return
+
+        _upsert_payment_transaction_for_payload(
+            order=order,
+            provider=PaymentTransaction.Provider.CLERK,
+            external_id=external_id,
+            raw_status=raw_status,
+            payload=data,
+        )
+
+        if not _is_success_status(raw_status):
+            return
+
+        try:
+            from .views import confirm_order_payment
+
+            confirm_order_payment(
+                order,
+                provider=PaymentTransaction.Provider.CLERK,
+                external_id=external_id,
+                clerk_checkout_id=checkout_id,
+                raw_payload=data,
+            )
+        except Exception:
+            logger.exception("Failed to confirm order from payment webhook payload.")
+            raise
+
+
+def handle_billing_payment_attempt_upsert(data: dict[str, Any]) -> None:
+    _confirm_order_from_payment_payload(data)
+
+
+def handle_billing_checkout_upsert(data: dict[str, Any]) -> None:
+    _confirm_order_from_payment_payload(data, fallback_checkout_id=_normalize_text(data.get("id")))
+
+
 EVENT_HANDLERS: dict[str, Any] = {
     "user.created": handle_user_created,
     "user.updated": handle_user_updated,
@@ -444,6 +709,18 @@ EVENT_HANDLERS: dict[str, Any] = {
     "billing.subscription.paused": handle_billing_subscription_upsert,
     "billing.subscription.canceled": handle_billing_subscription_canceled,
     "billing.subscription.cancelled": handle_billing_subscription_canceled,
+    # New Clerk Billing event names.
+    "paymentAttempt.created": handle_billing_payment_attempt_upsert,
+    "paymentAttempt.updated": handle_billing_payment_attempt_upsert,
+    "checkout.created": handle_billing_checkout_upsert,
+    "checkout.updated": handle_billing_checkout_upsert,
+    # Compatibility aliases for snake_case or prefixed providers.
+    "payment_attempt.created": handle_billing_payment_attempt_upsert,
+    "payment_attempt.updated": handle_billing_payment_attempt_upsert,
+    "billing.payment_attempt.created": handle_billing_payment_attempt_upsert,
+    "billing.payment_attempt.updated": handle_billing_payment_attempt_upsert,
+    "billing.checkout.created": handle_billing_checkout_upsert,
+    "billing.checkout.updated": handle_billing_checkout_upsert,
 }
 
 

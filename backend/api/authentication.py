@@ -28,6 +28,10 @@ class ClerkPrincipal:
         return self.clerk_user_id
 
     @property
+    def pk(self) -> str:
+        return self.clerk_user_id
+
+    @property
     def username(self) -> str:
         return self.clerk_user_id
 

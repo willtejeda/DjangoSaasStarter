@@ -14,6 +14,8 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
+const ENABLE_DEV_MANUAL_CHECKOUT =
+  (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
 const THEME_STORAGE_KEY = 'django_starter_theme';
 const THEME_DARK = 'dark';
 const THEME_LIGHT = 'light';
@@ -413,6 +415,12 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }) {
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
         return;
+      }
+
+      if (!ENABLE_DEV_MANUAL_CHECKOUT) {
+        throw new Error(
+          'Checkout URL missing for this price. Configure Clerk checkout metadata or enable VITE_ENABLE_DEV_MANUAL_CHECKOUT for local simulation only.'
+        );
       }
 
       await authedRequest(getToken, `/account/orders/${publicId}/confirm/`, {
