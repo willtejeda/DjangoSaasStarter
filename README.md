@@ -53,6 +53,29 @@ npm run dev
 
 Frontend runs on `http://127.0.0.1:5173`.
 
+### 3) Start Scripts
+
+Use the new helper scripts if you prefer a single entry point:
+
+```bash
+# From repository root: start backend + frontend together
+./start.sh
+```
+
+Or run each app separately:
+
+```bash
+# Backend
+cd backend
+./start.sh
+
+# Frontend
+cd frontend
+./start.sh
+```
+
+Backend script applies migrations before starting. Frontend script installs `node_modules` automatically if missing.
+
 ## Environment Variables
 
 ### Backend (`backend/.env`)
@@ -162,6 +185,17 @@ If your default DB points at a shared remote Postgres, run tests with local SQLi
 ```bash
 DB_NAME='' DB_USER='' DB_PASSWORD='' DB_HOST='' DB_PORT='' DATABASE_URL='sqlite:///local-test.sqlite3' python3 manage.py test api -v2
 ```
+
+## Docker Deployment (Backend API)
+
+Build and run the backend container:
+
+```bash
+docker build -t django-starter .
+docker run --rm -p 8000:8000 --env-file backend/.env django-starter
+```
+
+The container runs Django migrations at startup and serves the API with Gunicorn on port `8000` (or `$PORT` if provided).
 
 ## Production Checklist
 
