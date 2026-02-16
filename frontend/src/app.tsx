@@ -29,7 +29,7 @@ import {
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const ENABLE_DEV_MANUAL_CHECKOUT =
   (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
-const CHECKLIST_STORAGE_KEY = 'ds-launch-checklist-complete';
+const PREFLIGHT_EMAIL_STORAGE_KEY = 'ds-preflight-email-test';
 
 type Id = number | string;
 type NavigateFn = (nextPath: string) => void;
@@ -133,6 +133,7 @@ interface EntitlementRecord {
 interface MeResponse {
   customer_account?: {
     full_name?: string | null;
+    metadata?: Record<string, unknown> | null;
   } | null;
   profile?: {
     plan_tier?: string | null;
@@ -229,7 +230,14 @@ interface NavigateProps {
 }
 
 interface DashboardProps extends NavigateProps {
-  onChecklistStateChange: (complete: boolean) => void;
+  getToken: GetTokenFn;
+}
+
+interface PreflightEmailResponse {
+  sent: boolean;
+  detail: string;
+  recipient_email?: string;
+  sent_at?: string;
 }
 
 interface SignedAppProps {
@@ -769,7 +777,7 @@ function ProductCatalog({ onNavigate }: ProductCatalogProps): ReactElement {
               Open Pricing
             </button>
             <button type="button" className={buttonPrimary} onClick={() => onNavigate('/app')}>
-              Open Launch Console
+              Open Preflight Dashboard
             </button>
           </div>
         </article>
@@ -960,7 +968,7 @@ function ProductDetail({ slug, signedIn, onNavigate, getToken }: ProductDetailPr
               Open Pricing
             </button>
             <button type="button" className={buttonPrimary} onClick={() => onNavigate('/app')}>
-              Back to Launch Console
+              Back to Preflight Dashboard
             </button>
           </div>
         </article>
@@ -1439,8 +1447,8 @@ function UsageBar({ bucket }: { bucket: AiUsageBucketRecord }): ReactElement {
   );
 }
 
-function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps): ReactElement {
-  const { getToken, isLoaded, userId } = useAuth();
+function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElement {
+  const { isLoaded, userId } = useAuth();
   const { user } = useUser();
 
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -1453,6 +1461,59 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
   const [catalogProducts, setCatalogProducts] = useState<ProductRecord[]>([]);
   const [aiProviders, setAiProviders] = useState<AiProviderRecord[]>([]);
   const [aiUsage, setAiUsage] = useState<AiUsageSummaryResponse>({ period: 'current', plan_tier: 'free', buckets: [], notes: [] });
+  const [supabaseProbe, setSupabaseProbe] = useState<{ checked: boolean; ok: boolean; detail: string }>({
+    checked: false,
+    ok: false,
+    detail: 'Not tested yet.',
+  });
+  const [emailTestStatus, setEmailTestStatus] = useState<{
+    sent: boolean;
+    detail: string;
+    recipientEmail: string;
+    sentAt: string;
+    running: boolean;
+  }>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        sent: false,
+        detail: 'Not tested yet.',
+        recipientEmail: '',
+        sentAt: '',
+        running: false,
+      };
+    }
+
+    const raw = window.localStorage.getItem(PREFLIGHT_EMAIL_STORAGE_KEY);
+    if (!raw) {
+      return {
+        sent: false,
+        detail: 'Not tested yet.',
+        recipientEmail: '',
+        sentAt: '',
+        running: false,
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { recipient_email?: string; sent_at?: string };
+      const sentAt = String(parsed.sent_at || '');
+      return {
+        sent: Boolean(sentAt),
+        detail: sentAt ? `Last test email sent at ${new Date(sentAt).toLocaleString()}.` : 'Not tested yet.',
+        recipientEmail: String(parsed.recipient_email || ''),
+        sentAt,
+        running: false,
+      };
+    } catch {
+      return {
+        sent: false,
+        detail: 'Not tested yet.',
+        recipientEmail: '',
+        sentAt: '',
+        running: false,
+      };
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -1480,6 +1541,7 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
         catalogPayload,
         aiProvidersPayload,
         aiUsagePayload,
+        supabaseProbePayload,
       ] = await Promise.all([
         authedRequest<MeResponse>(getToken, '/me/'),
         authedRequest<BillingFeaturesResponse>(getToken, '/billing/features/'),
@@ -1496,6 +1558,19 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
           buckets: [],
           notes: [],
         })),
+        authedRequest<{ profile?: unknown }>(getToken, '/supabase/profile/')
+          .then((payload) => ({
+            checked: true,
+            ok: true,
+            detail: payload?.profile
+              ? 'Supabase profile probe succeeded.'
+              : 'Supabase probe succeeded. No profile row found yet.',
+          }))
+          .catch((probeError) => ({
+            checked: true,
+            ok: false,
+            detail: probeError instanceof Error ? probeError.message : 'Supabase probe failed.',
+          })),
       ]);
       setMe(mePayload || null);
       setBilling(billingPayload || { enabled_features: [] });
@@ -1507,6 +1582,39 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
       setCatalogProducts(Array.isArray(catalogPayload) ? catalogPayload : []);
       setAiProviders(Array.isArray(aiProvidersPayload) ? aiProvidersPayload : []);
       setAiUsage(aiUsagePayload || { period: 'current', plan_tier: 'free', buckets: [], notes: [] });
+      setSupabaseProbe(
+        supabaseProbePayload || {
+          checked: false,
+          ok: false,
+          detail: 'Not tested yet.',
+        }
+      );
+
+      const metadata = mePayload?.customer_account?.metadata;
+      if (metadata && typeof metadata === 'object') {
+        const sentAt = String((metadata as Record<string, unknown>).preflight_email_last_sent_at || '');
+        const recipientEmail = String((metadata as Record<string, unknown>).preflight_email_last_recipient || '');
+        if (sentAt) {
+          const detail = `Last test email sent at ${new Date(sentAt).toLocaleString()}.`;
+          setEmailTestStatus((previous) => ({
+            ...previous,
+            sent: true,
+            detail,
+            recipientEmail: recipientEmail || previous.recipientEmail,
+            sentAt,
+            running: false,
+          }));
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(
+              PREFLIGHT_EMAIL_STORAGE_KEY,
+              JSON.stringify({
+                recipient_email: recipientEmail,
+                sent_at: sentAt,
+              })
+            );
+          }
+        }
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load dashboard data.');
     } finally {
@@ -1560,59 +1668,121 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
 
   const configuredAiProviders = aiProviders.filter((provider) => provider.enabled).length;
   const bucketsNearLimit = aiUsage.buckets.filter((bucket) => bucket.near_limit).length;
+  const subscriptionUsageReady = activeSubscriptions.length > 0 && aiUsage.buckets.length > 0;
 
-  const launchChecklist = [
+  const sendPreflightEmailTest = async (): Promise<void> => {
+    setEmailTestStatus((previous) => ({
+      ...previous,
+      running: true,
+      detail: 'Sending test email...',
+    }));
+    setError('');
+    try {
+      const payload = await authedRequest<PreflightEmailResponse>(getToken, '/account/preflight/email-test/', {
+        method: 'POST',
+      });
+      const sentAt = String(payload.sent_at || new Date().toISOString());
+      const recipientEmail = String(payload.recipient_email || '');
+      const detail = payload.detail || `Test email sent at ${new Date(sentAt).toLocaleString()}.`;
+      setEmailTestStatus({
+        sent: Boolean(payload.sent),
+        detail,
+        recipientEmail,
+        sentAt,
+        running: false,
+      });
+      if (typeof window !== 'undefined' && payload.sent) {
+        window.localStorage.setItem(
+          PREFLIGHT_EMAIL_STORAGE_KEY,
+          JSON.stringify({
+            recipient_email: recipientEmail,
+            sent_at: sentAt,
+          })
+        );
+      }
+      await loadDashboard({ silent: true });
+    } catch (requestError) {
+      setEmailTestStatus((previous) => ({
+        ...previous,
+        sent: false,
+        running: false,
+        detail: requestError instanceof Error ? requestError.message : 'Could not send test email.',
+      }));
+    }
+  };
+
+  const preflightSteps: Array<{
+    key: string;
+    label: string;
+    done: boolean;
+    hint: string;
+    actionLabel: string;
+    route?: string;
+    action?: () => void;
+  }> = [
     {
-      key: 'offer',
-      label: 'Publish one offer',
-      route: '/products',
-      done: publishedProducts > 0,
-      hint: 'Create one product with a painful buyer outcome.',
+      key: 'clerk_sync',
+      label: 'Clerk auth and account sync',
+      done: Boolean(me?.profile) && Boolean(me?.customer_account),
+      hint: 'Sign in and verify `/api/me/` returns profile and customer account data.',
+      actionLabel: 'Refresh check',
+      action: () => {
+        loadDashboard({ silent: true });
+      },
     },
     {
-      key: 'price',
-      label: 'Attach one active price',
-      route: '/pricing',
-      done: pricedProducts > 0,
-      hint: 'Every offer needs a live price before testing conversion.',
+      key: 'supabase_probe',
+      label: 'Supabase bridge test',
+      done: supabaseProbe.checked && supabaseProbe.ok,
+      hint: supabaseProbe.detail,
+      actionLabel: 'Run Supabase probe',
+      action: () => {
+        loadDashboard({ silent: true });
+      },
     },
     {
-      key: 'payment',
-      label: 'Create one order attempt',
-      route: '/account/purchases',
+      key: 'resend_email',
+      label: 'Resend delivery test',
+      done: emailTestStatus.sent,
+      hint: emailTestStatus.sent
+        ? `${emailTestStatus.detail}${emailTestStatus.recipientEmail ? ` Recipient: ${emailTestStatus.recipientEmail}.` : ''}`
+        : emailTestStatus.detail || 'Send one test email before starting product work.',
+      actionLabel: emailTestStatus.running ? 'Sending...' : 'Send test email',
+      action: () => {
+        if (!emailTestStatus.running) {
+          void sendPreflightEmailTest();
+        }
+      },
+    },
+    {
+      key: 'order_attempt',
+      label: 'Order placement test',
       done: orders.length > 0,
-      hint: 'Start checkout from any offer and verify order record exists.',
+      hint: 'Place one test order from `/products` and confirm it appears in purchases.',
+      actionLabel: 'Run order test',
+      route: '/products',
     },
     {
-      key: 'payment_confirm',
-      label: 'Confirm paid status',
-      route: '/account/purchases',
+      key: 'webhook_payment',
+      label: 'Webhook payment confirmation test',
       done: paidOrders > 0,
-      hint: 'Wait for webhook processing and verify order moves to paid or fulfilled.',
+      hint: 'Complete checkout and verify order status changes to `paid` or `fulfilled`.',
+      actionLabel: 'Review purchases',
+      route: '/account/purchases',
     },
     {
-      key: 'fulfillment',
-      label: 'Verify fulfillment output',
-      route: '/account/downloads',
-      done: readyDownloads > 0 || bookings.length > 0 || currentEntitlements > 0 || activeSubscriptions.length > 0,
-      hint: 'Confirm downloads, subscriptions, bookings, or entitlements appear only after payment.',
-    },
-    {
-      key: 'ai',
-      label: 'Configure AI provider scaffolding',
-      route: '/app',
-      done: configuredAiProviders > 0,
-      hint: 'Set OpenRouter or Ollama env vars and validate usage summary surfaces.',
+      key: 'subscription_usage',
+      label: 'Subscription and usage test',
+      done: subscriptionUsageReady,
+      hint: 'Run one recurring checkout and verify subscription plus usage buckets in `/app`.',
+      actionLabel: 'Open subscriptions',
+      route: '/account/subscriptions',
     },
   ];
 
-  const completedChecklistCount = launchChecklist.filter((step) => step.done).length;
-  const checklistComplete = completedChecklistCount === launchChecklist.length;
-  const nextChecklistStep = launchChecklist.find((step) => !step.done);
-
-  useEffect(() => {
-    onChecklistStateChange(checklistComplete);
-  }, [checklistComplete, onChecklistStateChange]);
+  const completedPreflightCount = preflightSteps.filter((step) => step.done).length;
+  const preflightComplete = completedPreflightCount === preflightSteps.length;
+  const nextPreflightStep = preflightSteps.find((step) => !step.done);
 
   const requestAccess = async (token: string): Promise<void> => {
     setAccessingToken(token);
@@ -1637,14 +1807,26 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
     <>
       <section className={cn(sectionClass, 'space-y-6 bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-slate-900 dark:to-slate-900')}>
         <PageIntro
-          eyebrow="Launch Console"
-          title={`Ship the first paid loop, ${displayName}.`}
-          description="This dashboard keeps focus on revenue-critical tasks: offer, pricing, payment verification, and fulfillment confidence."
+          eyebrow="Before You Start"
+          title={`Run preflight validation before building features, ${displayName}.`}
+          description="Use this checklist to prove Clerk auth, Supabase connectivity, Resend delivery, order flow, webhook payment confirmation, and subscription usage behavior."
           actions={(
             <>
-              {nextChecklistStep ? (
-                <button type="button" className={buttonPrimary} onClick={() => onNavigate(nextChecklistStep.route)}>
-                  Continue: {nextChecklistStep.label}
+              {nextPreflightStep ? (
+                <button
+                  type="button"
+                  className={buttonPrimary}
+                  onClick={() => {
+                    if (nextPreflightStep.action) {
+                      nextPreflightStep.action();
+                      return;
+                    }
+                    if (nextPreflightStep.route) {
+                      onNavigate(nextPreflightStep.route);
+                    }
+                  }}
+                >
+                  Continue: {nextPreflightStep.label}
                 </button>
               ) : (
                 <button type="button" className={buttonPrimary} onClick={() => onNavigate('/products')}>
@@ -1671,29 +1853,29 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
         />
 
         <TutorialBlock
-          whatThisDoes="Transforms setup into a measurable launch checklist sourced from live APIs."
+          whatThisDoes="Turns integration setup into explicit preflight checks before product build work starts."
           howToTest={[
-            'Complete checklist steps in order',
-            'Refresh and confirm progress persists',
-            'Confirm expanded nav unlocks after checklist completion',
+            'Run each preflight test from top to bottom',
+            'Use refresh to re-check current integration status',
+            'Keep notes on which step failed before debugging',
           ]}
-          expectedResult="You always have one highest-leverage next action until paid loop is validated."
+          expectedResult="You can verify the full stack works before writing custom feature code."
         />
 
         <article className={cardClass}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Launch checklist</h2>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Preflight validation</h2>
             <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {completedChecklistCount}/{launchChecklist.length} complete
+              {completedPreflightCount}/{preflightSteps.length} passing
             </p>
           </div>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            {checklistComplete
-              ? 'Checklist complete. Full navigation is unlocked.'
-              : 'Navigation stays constrained until this checklist is complete to prevent setup sprawl.'}
+            {preflightComplete
+              ? 'All preflight checks passed. Start building your product-specific features.'
+              : 'Resolve every failing check before starting custom product work.'}
           </p>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {launchChecklist.map((step, index) => (
+            {preflightSteps.map((step, index) => (
               <article
                 key={step.key}
                 className={cn(
@@ -1713,15 +1895,50 @@ function AccountDashboard({ onNavigate, onChecklistStateChange }: DashboardProps
                   <StatusPill value={step.done ? 'done' : 'next'} />
                 </div>
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{step.hint}</p>
-                <button type="button" className={cn(buttonSecondary, 'mt-3')} onClick={() => onNavigate(step.route)}>
-                  {step.done ? 'Review' : 'Do this now'}
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={buttonSecondary}
+                    disabled={step.key === 'resend_email' && emailTestStatus.running}
+                    onClick={() => {
+                      if (step.action) {
+                        step.action();
+                        return;
+                      }
+                      if (step.route) {
+                        onNavigate(step.route);
+                      }
+                    }}
+                  >
+                    {step.actionLabel}
+                  </button>
+                  {step.route ? (
+                    <button type="button" className={buttonGhost} onClick={() => onNavigate(step.route!)}>
+                      Open route
+                    </button>
+                  ) : null}
+                </div>
               </article>
             ))}
           </div>
         </article>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard
+            label="Preflight"
+            value={`${completedPreflightCount}/${preflightSteps.length}`}
+            note={preflightComplete ? 'All checks passing' : 'Checks still pending'}
+          />
+          <MetricCard
+            label="Supabase Probe"
+            value={supabaseProbe.ok ? 'PASS' : 'FAIL'}
+            note={supabaseProbe.detail}
+          />
+          <MetricCard
+            label="Resend Test"
+            value={emailTestStatus.sent ? 'SENT' : 'PENDING'}
+            note={emailTestStatus.sent ? emailTestStatus.detail : 'Send one preflight email'}
+          />
           <MetricCard label="Plan" value={planTier.toUpperCase()} note={`${enabledFeatures.length} features enabled`} />
           <MetricCard label="Offers" value={String(publishedProducts)} note={`${pricedProducts} with active price`} />
           <MetricCard label="Paid Orders" value={String(paidOrders)} note={`${orders.length} total purchases`} />
@@ -1955,22 +2172,7 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
   const { getToken } = useAuth();
   const isProductDetail = pathname.startsWith('/products/');
   const productSlug = isProductDetail ? pathname.replace('/products/', '') : '';
-  const [checklistComplete, setChecklistComplete] = useState<boolean>(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    const cached = window.localStorage.getItem(CHECKLIST_STORAGE_KEY);
-    return cached === 'true';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    window.localStorage.setItem(CHECKLIST_STORAGE_KEY, checklistComplete ? 'true' : 'false');
-  }, [checklistComplete]);
-
-  let content: ReactNode = <AccountDashboard onNavigate={onNavigate} onChecklistStateChange={setChecklistComplete} />;
+  let content: ReactNode = <AccountDashboard onNavigate={onNavigate} getToken={getToken} />;
 
   if (pathname === '/pricing') {
     content = <PricingPage signedIn />;
@@ -2013,7 +2215,7 @@ function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }: Signed
         pathname={pathname}
         onNavigate={onNavigate}
         signedIn
-        expandedNav={checklistComplete}
+        expandedNav
         themeLabel={themeLabel}
         onToggleTheme={onToggleTheme}
       />

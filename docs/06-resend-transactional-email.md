@@ -8,6 +8,7 @@ Resend sends are triggered from backend workflows:
 
 - Order fulfillment confirmation email
 - Booking request confirmation email
+- Preflight test email endpoint: `POST /api/account/preflight/email-test/`
 
 Code path: `backend/api/emails.py`
 
@@ -43,7 +44,33 @@ Notes:
 3. Generate an API key and place it in `RESEND_API_KEY`.
 4. Restart backend after env changes.
 
-## 4. Local verification flow
+## 4. Preflight verification flow
+
+Run this after sign-in:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/account/preflight/email-test/ \
+  -H "Authorization: Bearer <token>"
+```
+
+Expected response:
+
+```json
+{
+  "sent": true,
+  "detail": "Preflight email sent to you@example.com.",
+  "recipient_email": "you@example.com",
+  "sent_at": "2026-02-16T..."
+}
+```
+
+This confirms:
+
+- Resend API key is valid
+- Sender identity is accepted
+- Recipient resolution works from customer account/profile
+
+## 5. Local verification flow for transactional events
 
 Order confirmation:
 
@@ -60,7 +87,7 @@ Expected behavior:
 - API success does not depend on email provider success.
 - Checkout and booking flows stay source-of-truth even if email send fails.
 
-## 5. How recipients are resolved
+## 6. How recipients are resolved
 
 Recipient list is built from:
 
@@ -69,26 +96,64 @@ Recipient list is built from:
 
 Duplicates are removed and values are normalized before send.
 
-## 6. Idempotency and duplicate control
+## 7. Idempotency and duplicate control
 
 Resend requests include idempotency keys:
 
 - `order-fulfilled-<order_public_id>`
 - `booking-requested-<booking_id>`
+- `preflight-email-<account_id>-<timestamp>`
 
 This reduces duplicate sends during retries.
 
-## 7. Production checklist
+## 8. Tailwind style email templates with CSS inlining
+
+Email clients do not run Tailwind runtime CSS. Use this pattern:
+
+1. Write utility-like class names in HTML (`bg-slate-100`, `text-slate-900`, etc).
+2. Define corresponding CSS in a `<style>` block.
+3. Inline styles before send using `premailer`.
+
+The backend includes this helper flow in `backend/api/emails.py`:
+
+- `_inline_email_html()` uses `premailer.transform(...)`
+- Falls back to raw HTML if inlining fails
+
+Minimal pattern:
+
+```python
+from premailer import transform
+
+raw_html = """
+<html>
+  <head>
+    <style>
+      .bg-slate-100 { background-color: #f1f5f9; }
+      .text-slate-900 { color: #0f172a; }
+      .rounded-xl { border-radius: 12px; }
+    </style>
+  </head>
+  <body class="bg-slate-100 text-slate-900">
+    <div class="rounded-xl">Preflight email test</div>
+  </body>
+</html>
+"""
+
+inlined_html = transform(raw_html, keep_style_tags=False, remove_classes=True)
+```
+
+## 9. Production checklist
 
 1. Verify sender domain and from address are valid in Resend.
 2. Set `FRONTEND_APP_URL` to your production frontend origin.
-3. Run one paid order test and one booking test in staging.
-4. Confirm both sends appear in Resend activity.
-5. Keep payment confirmation webhook-driven and server-side.
+3. Run one preflight email test in staging.
+4. Run one paid order test and one booking test in staging.
+5. Confirm sends appear in Resend activity.
+6. Keep payment confirmation webhook-driven and server-side.
 
-## 8. Fast troubleshooting
+## 10. Fast troubleshooting
 
-No email received after successful order or booking:
+No email received after successful order, booking, or preflight send:
 
 - Check `RESEND_API_KEY` and `RESEND_FROM_EMAIL`.
 - Check sender identity verification in Resend.

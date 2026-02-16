@@ -25,6 +25,7 @@ from .supabase_client import _ensure_https
 from .views import extract_billing_features
 from .webhooks import (
     ClerkWebhookView,
+    EVENT_HANDLERS,
     WebhookVerificationError,
     _verify_webhook,
     handle_billing_checkout_upsert,
@@ -222,6 +223,20 @@ class ClerkWebhookViewTests(SimpleTestCase):
             _verify_webhook(b"{}", {"svix-id": "", "svix-timestamp": "", "svix-signature": ""})
 
 
+class ClerkWebhookEventMappingTests(SimpleTestCase):
+    def test_supports_subscription_events_with_and_without_billing_prefix(self):
+        self.assertIn("subscription.created", EVENT_HANDLERS)
+        self.assertIn("subscription.updated", EVENT_HANDLERS)
+        self.assertIn("subscription.active", EVENT_HANDLERS)
+        self.assertIn("subscription.pastDue", EVENT_HANDLERS)
+        self.assertIn("subscription.canceled", EVENT_HANDLERS)
+        self.assertIn("billing.subscription.created", EVENT_HANDLERS)
+        self.assertIn("billing.subscription.updated", EVENT_HANDLERS)
+        self.assertIn("billing.subscription.active", EVENT_HANDLERS)
+        self.assertIn("billing.subscription.pastDue", EVENT_HANDLERS)
+        self.assertIn("billing.subscription.canceled", EVENT_HANDLERS)
+
+
 class ClerkWebhookHandlerTests(TestCase):
     def test_handle_user_created_upserts_profile(self):
         handle_user_created(
@@ -411,6 +426,32 @@ class ProjectApiTests(TestCase):
         self.assertEqual(len(response.data["buckets"]), 3)
         self.assertEqual({bucket["key"] for bucket in response.data["buckets"]}, {"tokens", "images", "videos"})
         self.assertIn("notes", response.data)
+
+    def test_preflight_email_test_requires_resend_config(self):
+        response = self._request("post", "/api/account/preflight/email-test/")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.data["sent"])
+
+    @override_settings(
+        RESEND_API_KEY="re_test_key",
+        RESEND_FROM_EMAIL="Acme <updates@example.com>",
+    )
+    @patch("api.views.send_preflight_test_email")
+    def test_preflight_email_test_updates_customer_metadata(self, mock_send_preflight):
+        mock_send_preflight.return_value = (True, "owner@example.com")
+
+        response = self._request("post", "/api/account/preflight/email-test/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["sent"])
+        self.assertEqual(response.data["recipient_email"], "owner@example.com")
+
+        profile = Profile.objects.get(clerk_user_id="user_123")
+        account = profile.customer_account
+        self.assertIn("preflight_email_last_sent_at", account.metadata)
+        self.assertEqual(account.metadata.get("preflight_email_last_recipient"), "owner@example.com")
+        mock_send_preflight.assert_called_once_with(account)
 
     def test_cannot_access_other_users_project(self):
         other_profile = Profile.objects.create(clerk_user_id="user_999", email="other@example.com")

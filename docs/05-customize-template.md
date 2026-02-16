@@ -2,6 +2,8 @@
 
 Goal: convert the starter into your product without breaking payment truth, fulfillment trust, or schema ownership.
 
+Before feature work, run preflight checks from `/app` and make sure all integration tests are passing.
+
 ## 1. Lock the paid outcome first
 
 Write these 5 lines before coding:
@@ -55,6 +57,31 @@ Create:
 Do not hardcode prices in frontend. Keep catalog source of truth server-side.
 
 For each buyable price, set `metadata.checkout_url` to your Clerk checkout URL.
+
+## 4.1 Configure Clerk Billing for subscriptions
+
+In Clerk dashboard:
+
+1. Enable Billing and connect Stripe.
+2. Create Plans and attach feature entitlements.
+3. Keep plan names aligned with your Django `Price` records.
+4. Use `PricingTable` in frontend for buyer plan selection.
+
+Webhook events to enable at minimum:
+
+- `subscription.created`
+- `subscription.updated`
+- `subscription.active`
+- `subscription.pastDue`
+- `subscription.canceled`
+- `paymentAttempt.created`
+- `paymentAttempt.updated`
+- `checkout.created`
+- `checkout.updated`
+
+Endpoint:
+
+- `POST /api/webhooks/clerk/`
 
 ## 5. Configure fulfillment paths
 

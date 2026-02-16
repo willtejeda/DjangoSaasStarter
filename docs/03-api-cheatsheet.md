@@ -136,6 +136,13 @@ curl -X POST "$API/account/orders/create/" \
   }'
 ```
 
+Send a preflight Resend test email:
+
+```bash
+curl -X POST "$API/account/preflight/email-test/" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 List orders:
 
 ```bash

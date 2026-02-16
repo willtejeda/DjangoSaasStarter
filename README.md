@@ -185,6 +185,19 @@ Run frontend image:
 docker run --rm -p 5173:80 djangostarter-frontend
 ```
 
+## Before You Start Building Features
+
+Use the signed-in dashboard (`/app`) preflight validator to confirm integrations first:
+
+1. Clerk auth and profile sync
+2. Supabase bridge probe
+3. Resend delivery test email
+4. Order placement test
+5. Webhook payment confirmation test
+6. Subscription plus usage test
+
+This catches infrastructure misconfiguration before product feature work begins.
+
 ## Environment Variables
 
 ### Backend (`backend/.env`)
@@ -356,9 +369,11 @@ Create Clerk webhook endpoint:
 This starter handles:
 
 - `user.created`, `user.updated`, `user.deleted`
-- `billing.subscription.created`, `billing.subscription.updated`, `billing.subscription.active`, `billing.subscription.paused`, `billing.subscription.canceled`
+- `subscription.created`, `subscription.updated`, `subscription.active`, `subscription.pastDue`, `subscription.canceled`
 - `paymentAttempt.created`, `paymentAttempt.updated`
 - `checkout.created`, `checkout.updated`
+
+Legacy compatibility aliases are also supported for `billing.subscription.*` and `billing.checkout.*` payload names.
 
 Webhook events are also saved to local `WebhookEvent` for idempotency and audit history.
 
@@ -425,6 +440,7 @@ Implemented models in `backend/api/models.py`:
 - `GET/PATCH /api/account/customer/`
 - `GET /api/account/orders/`
 - `POST /api/account/orders/create/`
+- `POST /api/account/preflight/email-test/`
 - `POST /api/account/orders/<public_id>/confirm/`
 - `GET /api/account/subscriptions/`
 - `GET /api/account/entitlements/`

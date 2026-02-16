@@ -168,6 +168,28 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/profile/
 
 5. Retry purchase or booking and check backend logs for Resend warnings.
 
+## Preflight email test endpoint returns `400`
+
+Problem:
+
+- Resend env vars are missing.
+
+Fix:
+
+Set in `backend/.env`:
+
+```bash
+RESEND_API_KEY=re_xxx
+RESEND_FROM_EMAIL=Acme <updates@yourdomain.com>
+```
+
+Then restart backend and retry:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/account/preflight/email-test/ \
+  -H "Authorization: Bearer <token>"
+```
+
 ## AI providers show as disabled in `/app`
 
 Problem:

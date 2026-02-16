@@ -4,6 +4,8 @@ Goal: publish one offer and complete one end-to-end purchase flow.
 
 This is the fastest path to prove your stack can make money.
 
+Before and after this flow, use `/app` preflight validation to confirm integrations are healthy.
+
 ## 1. Seed a published digital product and one-time price
 
 Run this from backend:

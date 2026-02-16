@@ -7,8 +7,14 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.utils import timezone
 
-from .models import Booking, Order
+from .models import Booking, CustomerAccount, Order
+
+try:
+    from premailer import transform as premailer_transform
+except Exception:  # pragma: no cover
+    premailer_transform = None
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,26 @@ def _resend_enabled() -> bool:
     api_key = _normalize_text(getattr(settings, "RESEND_API_KEY", ""))
     sender = _normalize_text(getattr(settings, "RESEND_FROM_EMAIL", ""))
     return bool(api_key and sender)
+
+
+def resend_is_configured() -> bool:
+    return _resend_enabled()
+
+
+def _inline_email_html(html_body: str) -> str:
+    if premailer_transform is None:
+        return html_body
+
+    try:
+        return premailer_transform(
+            html_body,
+            keep_style_tags=False,
+            remove_classes=True,
+            disable_validation=True,
+        )
+    except Exception:  # pragma: no cover
+        logger.exception("Failed to inline CSS with premailer. Sending original HTML.")
+        return html_body
 
 
 def _format_currency(cents: int, currency: str) -> str:
@@ -244,3 +270,86 @@ def send_booking_requested_email(booking: Booking) -> bool:
         tags={"event": "booking_requested", "source": "django_starter"},
         idempotency_key=f"booking-requested-{booking.id}",
     )
+
+
+def send_preflight_test_email(account: CustomerAccount) -> tuple[bool, str]:
+    recipients = _normalize_email_candidates(
+        [
+            getattr(account, "billing_email", ""),
+            getattr(account.profile, "email", ""),
+        ]
+    )
+    if not recipients:
+        return False, ""
+
+    recipient = recipients[0]
+    now = timezone.now()
+    frontend_url = _normalize_url(getattr(settings, "FRONTEND_APP_URL", ""))
+    dashboard_url = f"{frontend_url}/app" if frontend_url else ""
+
+    subject = "DjangoStarter preflight email test"
+    text_body = "\n".join(
+        [
+            "This is a preflight delivery test from DjangoStarter.",
+            "",
+            "If you received this email, Resend API, sender identity, and recipient resolution are working.",
+            "",
+            f"Timestamp: {now.isoformat()}",
+            f"Recipient: {recipient}",
+            f"Dashboard: {dashboard_url}" if dashboard_url else "",
+        ]
+    ).strip()
+
+    utility_like_css = """
+      .bg-slate-100 { background-color: #f1f5f9; }
+      .bg-slate-950 { background-color: #020617; }
+      .text-slate-900 { color: #0f172a; }
+      .text-slate-100 { color: #f8fafc; }
+      .text-slate-600 { color: #475569; }
+      .text-cyan-700 { color: #0e7490; }
+      .rounded-xl { border-radius: 12px; }
+      .border { border: 1px solid #cbd5e1; }
+      .p-24 { padding: 24px; }
+      .mb-16 { margin-bottom: 16px; }
+      .inline-block { display: inline-block; }
+      .font-bold { font-weight: 700; }
+      .font-semibold { font-weight: 600; }
+      .text-sm { font-size: 14px; line-height: 20px; }
+      .text-xs { font-size: 12px; line-height: 16px; }
+      .button { background: #020617; color: #f8fafc; text-decoration: none; padding: 10px 14px; border-radius: 10px; }
+    """.strip()
+
+    html_template = f"""
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>{utility_like_css}</style>
+        </head>
+        <body class="bg-slate-100 text-slate-900" style="margin: 0; padding: 24px; font-family: Arial, sans-serif;">
+          <div class="rounded-xl border p-24" style="max-width: 560px; margin: 0 auto; background: #ffffff;">
+            <p class="text-xs font-semibold text-cyan-700 mb-16">DjangoStarter Preflight</p>
+            <h2 class="font-bold mb-16" style="margin-top: 0;">Resend delivery test passed request stage</h2>
+            <p class="text-sm text-slate-600 mb-16">
+              This test validates your outbound email route before building product features.
+            </p>
+            <p class="text-sm text-slate-600 mb-16">
+              <strong>Timestamp:</strong> {escape(now.isoformat())}<br />
+              <strong>Recipient:</strong> {escape(recipient)}
+            </p>
+            {f'<a class="button inline-block" href="{escape(dashboard_url)}">Open Dashboard</a>' if dashboard_url else ''}
+          </div>
+        </body>
+      </html>
+    """.strip()
+
+    html_body = _inline_email_html(html_template)
+
+    sent = _send_resend_email(
+        recipients=recipients,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        tags={"event": "preflight_email_test", "source": "django_starter"},
+        idempotency_key=f"preflight-email-{account.id}-{now.strftime('%Y%m%d%H%M%S')}",
+    )
+    return sent, recipient

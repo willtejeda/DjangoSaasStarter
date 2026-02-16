@@ -24,7 +24,12 @@ from .billing import (
     extract_billing_features as extract_billing_features_from_claims,
     infer_plan_tier as infer_plan_tier_from_features,
 )
-from .emails import send_booking_requested_email, send_order_fulfilled_email
+from .emails import (
+    resend_is_configured,
+    send_booking_requested_email,
+    send_order_fulfilled_email,
+    send_preflight_test_email,
+)
 from .models import (
     Booking,
     CustomerAccount,
@@ -708,6 +713,51 @@ class AccountCustomerView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class AccountPreflightEmailTestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not resend_is_configured():
+            return Response(
+                {
+                    "sent": False,
+                    "detail": (
+                        "Resend is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL in backend/.env."
+                    ),
+                },
+                status=400,
+            )
+
+        account = get_request_customer_account(request)
+        sent, recipient = send_preflight_test_email(account)
+        if not sent:
+            return Response(
+                {
+                    "sent": False,
+                    "detail": (
+                        "Preflight email failed. Check sender verification, recipient email, and backend logs."
+                    ),
+                },
+                status=502,
+            )
+
+        sent_at = django_timezone.now()
+        metadata = account.metadata if isinstance(account.metadata, dict) else {}
+        metadata["preflight_email_last_sent_at"] = sent_at.isoformat()
+        metadata["preflight_email_last_recipient"] = recipient
+        account.metadata = metadata
+        account.save(update_fields=["metadata", "updated_at"])
+
+        return Response(
+            {
+                "sent": True,
+                "detail": f"Preflight email sent to {recipient}.",
+                "recipient_email": recipient,
+                "sent_at": sent_at.isoformat(),
+            }
+        )
 
 
 class AccountOrderListView(generics.ListAPIView):

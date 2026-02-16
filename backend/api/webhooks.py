@@ -189,11 +189,12 @@ def _resolve_customer_account_from_clerk_user_id(clerk_user_id: str) -> Customer
 
 
 def _map_subscription_status(raw_status: str) -> str:
-    normalized = str(raw_status or "").strip().lower()
+    normalized = str(raw_status or "").strip().lower().replace("-", "_")
     mapping = {
         "active": Subscription.Status.ACTIVE,
         "trialing": Subscription.Status.TRIALING,
         "past_due": Subscription.Status.PAST_DUE,
+        "pastdue": Subscription.Status.PAST_DUE,
         "canceled": Subscription.Status.CANCELED,
         "cancelled": Subscription.Status.CANCELED,
         "incomplete": Subscription.Status.INCOMPLETE,
@@ -703,9 +704,19 @@ EVENT_HANDLERS: dict[str, Any] = {
     "user.updated": handle_user_updated,
     "user.deleted": handle_user_deleted,
     "session.created": handle_session_created,
+    # Clerk Billing subscription event names.
+    "subscription.created": handle_billing_subscription_upsert,
+    "subscription.updated": handle_billing_subscription_upsert,
+    "subscription.active": handle_billing_subscription_upsert,
+    "subscription.pastDue": handle_billing_subscription_upsert,
+    "subscription.paused": handle_billing_subscription_upsert,
+    "subscription.canceled": handle_billing_subscription_canceled,
+    "subscription.cancelled": handle_billing_subscription_canceled,
+    # Compatibility aliases for prefixed billing subscription names.
     "billing.subscription.created": handle_billing_subscription_upsert,
     "billing.subscription.updated": handle_billing_subscription_upsert,
     "billing.subscription.active": handle_billing_subscription_upsert,
+    "billing.subscription.pastDue": handle_billing_subscription_upsert,
     "billing.subscription.paused": handle_billing_subscription_upsert,
     "billing.subscription.canceled": handle_billing_subscription_canceled,
     "billing.subscription.cancelled": handle_billing_subscription_canceled,

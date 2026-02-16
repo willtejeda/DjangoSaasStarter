@@ -166,6 +166,14 @@ Check signed-in paths:
 
 Each page should load without console errors and show correct empty or populated states.
 
+In `/app`, run the preflight validator before feature work:
+
+- Clerk auth and profile sync check
+- Supabase bridge probe
+- Resend preflight email send
+- Order and payment webhook checks
+- Subscription plus usage check
+
 ### Step 9: Ship only after quality gates
 
 Run all required checks:

@@ -5,6 +5,7 @@ from .views import (
     AiUsageSummaryView,
     AccountBookingListCreateView,
     AccountCustomerView,
+    AccountPreflightEmailTestView,
     AccountDownloadAccessView,
     AccountDownloadGrantListView,
     AccountEntitlementListView,
@@ -45,6 +46,11 @@ urlpatterns = [
     path("products/", PublicProductListView.as_view(), name="product-public-list"),
     path("products/<slug:slug>/", PublicProductDetailView.as_view(), name="product-public-detail"),
     path("account/customer/", AccountCustomerView.as_view(), name="account-customer"),
+    path(
+        "account/preflight/email-test/",
+        AccountPreflightEmailTestView.as_view(),
+        name="account-preflight-email-test",
+    ),
     path("account/orders/", AccountOrderListView.as_view(), name="account-order-list"),
     path("account/orders/create/", AccountOrderCreateView.as_view(), name="account-order-create"),
     path(
