@@ -20,7 +20,11 @@ python3 manage.py runserver
 | `DJANGO_SECRET_KEY` | ✅ | Change before production |
 | `DJANGO_DEBUG` | — | `True` for dev (default) |
 | `DJANGO_ALLOWED_HOSTS` | — | Comma-separated (default: `localhost,127.0.0.1`) |
-| `DATABASE_URL` | — | PostgreSQL URL (falls back to SQLite) |
+| `DB_NAME` | — | Database name (default: `postgres`) |
+| `DB_USER` | — | Database user (default: `postgres`) |
+| `DB_PASSWORD` | — | Database password |
+| `DB_HOST` | — | **Use Supabase Pooler URL** (e.g. `aws-0...pooler.supabase.com`) |
+| `DB_PORT` | — | Database port (default: `5432`) |
 | `CORS_ALLOWED_ORIGINS` | — | Comma-separated frontend origins |
 | `CSRF_TRUSTED_ORIGINS` | — | Comma-separated trusted origins |
 | `CLERK_SECRET_KEY` | ✅ | [Dashboard → API Keys](https://dashboard.clerk.com) |

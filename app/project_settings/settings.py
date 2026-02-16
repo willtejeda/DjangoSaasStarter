@@ -58,7 +58,24 @@ TEMPLATES = [
 WSGI_APPLICATION = "project_settings.wsgi.application"
 
 
-def parse_database_url():
+def get_database_config():
+    # First try individual configs
+    db_name = config("DB_NAME", default="")
+    db_user = config("DB_USER", default="")
+    db_password = config("DB_PASSWORD", default="")
+    db_host = config("DB_HOST", default="")
+    db_port = config("DB_PORT", default="")
+
+    if db_name and db_user and db_password:
+        return {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": db_name,
+            "USER": db_user,
+            "PASSWORD": db_password,
+            "HOST": db_host,
+            "PORT": db_port,
+        }
+
     database_url = config("DATABASE_URL", default="")
     if not database_url:
         return {
@@ -97,7 +114,7 @@ def parse_database_url():
     raise ValueError(f"Unsupported DATABASE_URL scheme: {parsed.scheme}")
 
 
-DATABASES = {"default": parse_database_url()}
+DATABASES = {"default": get_database_config()}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
