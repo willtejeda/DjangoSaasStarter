@@ -10,7 +10,7 @@ Before coding, answer:
 2. What result do they buy?
 3. What unlocks immediately after payment?
 
-Update these first in `./frontend/src/app.tsx`.
+Update these first in `./frontend/src/routes/landing/page.tsx`.
 
 ## Modular delete map
 
@@ -43,12 +43,15 @@ Update these first in `./frontend/src/app.tsx`.
 
 - App shell and routes: `./frontend/src/app.tsx`
 - Route map composition: `./frontend/src/routes/index.tsx`
-- Public route pages: `./frontend/src/routes/public/routes.tsx`
-- Signed-in account pages: `./frontend/src/routes/app/routes.tsx`
+- Landing page route: `./frontend/src/routes/landing/page.tsx`
+- Pricing route: `./frontend/src/routes/pricing/page.tsx`
+- Product routes: `./frontend/src/routes/products/`
+- Signed-in dashboard route: `./frontend/src/routes/app/dashboard/page.tsx`
+- Signed-in account routes: `./frontend/src/routes/app/account/`
 - API client: `./frontend/src/lib/api.ts`
 - UI utilities: `./frontend/src/shared/ui-utils.ts`
 - Layout and nav components: `./frontend/src/components/layout/app-shell.tsx`
-- Example-only code: `./frontend/src/components/examples/`
+- Example-only code: `./frontend/src/routes/examples/`
 
 ## Recommended first customizations
 
@@ -61,10 +64,10 @@ Update these first in `./frontend/src/app.tsx`.
 ## Add a new frontend page
 
 1. Create the page component in either:
-   - `./frontend/src/routes/public/routes.tsx`, or
-   - `./frontend/src/routes/app/routes.tsx`
+   - a URL-focused route folder inside `./frontend/src/routes/`, or
+   - `./frontend/src/routes/app/account/` for signed-in account pages
 2. Wire route matching in `./frontend/src/routes/index.tsx`.
-3. Add sidebar and top-nav links if needed via `./frontend/src/components/layout/app-shell.tsx`.
+3. Add or update sidebar links via `./frontend/src/components/layout/app-shell.tsx`.
 4. Run `npm run typecheck` and `npm run build`.
 
 ## Growth checklist

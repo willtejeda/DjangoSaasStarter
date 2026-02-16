@@ -44,10 +44,13 @@ Frontend:
 - `frontend/src/shared/ui-utils.ts`: shared UI helpers
 - `frontend/src/components/layout/app-shell.tsx`: shared nav/layout and page primitives
 - `frontend/src/components/feedback/toast.tsx`: user feedback notifications
-- `frontend/src/routes/public/routes.tsx`: signed-out and shared route pages
-- `frontend/src/routes/app/routes.tsx`: signed-in account route pages
 - `frontend/src/routes/index.tsx`: route composition and route map
-- `frontend/src/components/examples/`: non-essential demos and reference snippets
+- `frontend/src/routes/landing/page.tsx`: landing page route
+- `frontend/src/routes/pricing/page.tsx`: billing plans route
+- `frontend/src/routes/products/`: product catalog and product detail routes
+- `frontend/src/routes/app/dashboard/page.tsx`: signed-in preflight dashboard route
+- `frontend/src/routes/app/account/`: signed-in account routes (purchases, subscriptions, downloads, bookings)
+- `frontend/src/routes/examples/`: non-essential demos and reference snippets
 - `frontend/src/app.tsx`: app bootstrap and auth-aware shell selection
 
 ## Non Negotiables
@@ -91,7 +94,7 @@ When in doubt, ask and answer beginner-facing questions explicitly in docs and U
 
 Then execute in this order:
 
-1. Update messaging surfaces in `frontend/src/app.tsx`
+1. Update messaging surfaces in `frontend/src/routes/landing/page.tsx`
 2. Validate one paid loop end to end
 3. Expand feature depth only after paid loop integrity is proven
 
@@ -116,7 +119,7 @@ Output required:
 
 ### Step 2: Adapt marketing surfaces first
 
-Edit `frontend/src/routes/public/routes.tsx` first for marketing surfaces, then adjust `frontend/src/routes/index.tsx` if route behavior changes.
+Edit `frontend/src/routes/landing/page.tsx` first for marketing surfaces, then adjust `frontend/src/routes/index.tsx` if route behavior changes.
 
 Minimum updates:
 
@@ -331,3 +334,5 @@ Start here:
 - `docs/08-security-pass-phase-1.md`
 - `docs/09-agent-frameworks-2026.md`
 - `docs/10-agent-framework-examples.md`
+- `docs/11-name-ideas.md`
+- `docs/12-frontend-starter-blueprint.md`

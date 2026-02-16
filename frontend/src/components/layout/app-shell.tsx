@@ -3,7 +3,6 @@ import { useEffect, useState, type ReactElement } from 'react';
 
 import type {
   AiUsageBucketRecord,
-  HeaderProps,
   MetricCardProps,
   NavigateFn,
   PageIntroProps,
@@ -52,107 +51,7 @@ export function StatusPill({ value }: { value: string }): ReactElement {
   );
 }
 
-export function Header({ pathname, onNavigate, signedIn, themeLabel, onToggleTheme }: HeaderProps): ReactElement {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
-
-  const links = signedIn
-    ? [
-        { label: 'Dashboard', to: '/app' },
-        { label: 'Offers', to: '/products' },
-        { label: 'Pricing', to: '/pricing' },
-        { label: 'Examples', to: '/examples' },
-      ]
-    : [
-        { label: 'Home', to: '/' },
-        { label: 'Offers', to: '/products' },
-        { label: 'Pricing', to: '/pricing' },
-        { label: 'Examples', to: '/examples' },
-      ];
-
-  return (
-    <header className="sticky top-3 z-30 rounded-2xl border border-slate-200 bg-white/92 px-4 py-4 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/88 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          className="flex items-center gap-3 text-left"
-          onClick={() => onNavigate(signedIn ? '/app' : '/')}
-        >
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-950 text-sm font-bold text-white dark:bg-cyan-400 dark:text-slate-950">
-            DS
-          </span>
-          <span>
-            <span className="block text-base font-bold text-slate-900 dark:text-slate-100">DjangoStarter</span>
-            <span className="block text-xs uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-              Cashflow-first SaaS starter for creators
-            </span>
-          </span>
-        </button>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className={cn(buttonGhost, 'lg:hidden')}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-primary-nav"
-            onClick={() => setMobileMenuOpen((value) => !value)}
-          >
-            {mobileMenuOpen ? 'Close' : 'Menu'}
-          </button>
-          <button type="button" className={buttonGhost} onClick={onToggleTheme}>
-            {themeLabel}
-          </button>
-          {signedIn ? (
-            <UserButton afterSignOutUrl="/" />
-          ) : (
-            <>
-              <SignInButton mode="modal">
-                <button type="button" className={buttonSecondary}>Sign In</button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button type="button" className={buttonPrimary}>Start Free</button>
-              </SignUpButton>
-            </>
-          )}
-        </div>
-      </div>
-
-      <nav
-        id="mobile-primary-nav"
-        className={cn('mt-4 grid gap-2 lg:hidden', !mobileMenuOpen && 'hidden')}
-        aria-label="Primary"
-      >
-        {links.map((link) => {
-          const active = pathname === link.to;
-          return (
-            <a
-              key={link.to}
-              href={link.to}
-              className={cn(
-                'rounded-xl px-3 py-2 text-sm font-semibold transition',
-                active
-                  ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              )}
-              onClick={(event) => {
-                event.preventDefault();
-                setMobileMenuOpen(false);
-                onNavigate(link.to);
-              }}
-            >
-              {link.label}
-            </a>
-          );
-        })}
-      </nav>
-    </header>
-  );
-}
-
-export function Sidebar({ pathname, onNavigate, signedIn }: { pathname: string; onNavigate: NavigateFn; signedIn: boolean }): ReactElement {
+function navLinksFor(signedIn: boolean): Array<{ label: string; to: string }> {
   const signedInLinks = [
     { label: 'Dashboard', to: '/app' },
     { label: 'Offers', to: '/products' },
@@ -171,10 +70,52 @@ export function Sidebar({ pathname, onNavigate, signedIn }: { pathname: string; 
     { label: 'Examples', to: '/examples' },
   ];
 
-  const links = signedIn ? signedInLinks : publicLinks;
+  return signedIn ? signedInLinks : publicLinks;
+}
+
+interface PrimaryNavigationProps {
+  pathname: string;
+  onNavigate: NavigateFn;
+  signedIn: boolean;
+  themeLabel: string;
+  onToggleTheme: () => void;
+}
+
+function NavigationPanel({
+  pathname,
+  onNavigate,
+  signedIn,
+  themeLabel,
+  onToggleTheme,
+  onClose,
+}: PrimaryNavigationProps & { onClose?: () => void }): ReactElement {
+  const links = navLinksFor(signedIn);
+
+  const navigateAndClose = (to: string): void => {
+    onNavigate(to);
+    if (onClose) {
+      onClose();
+    }
+  };
 
   return (
     <aside className="h-full rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/85">
+      <button
+        type="button"
+        className="flex items-center gap-3 text-left"
+        onClick={() => navigateAndClose(signedIn ? '/app' : '/')}
+      >
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-950 text-sm font-bold text-white dark:bg-cyan-400 dark:text-slate-950">
+          DS
+        </span>
+        <span>
+          <span className="block text-base font-bold text-slate-900 dark:text-slate-100">DjangoStarter</span>
+          <span className="block text-xs uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+            Cashflow-first SaaS starter
+          </span>
+        </span>
+      </button>
+
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Navigation</p>
       <nav className="mt-3 grid gap-2">
         {links.map((link) => {
@@ -191,7 +132,7 @@ export function Sidebar({ pathname, onNavigate, signedIn }: { pathname: string; 
               )}
               onClick={(event) => {
                 event.preventDefault();
-                onNavigate(link.to);
+                navigateAndClose(link.to);
               }}
             >
               {link.label}
@@ -205,7 +146,92 @@ export function Sidebar({ pathname, onNavigate, signedIn }: { pathname: string; 
           Ship one paid loop first. Then optimize retention and traffic.
         </p>
       </div>
+
+      <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-700">
+        <button type="button" className={cn(buttonGhost, 'w-full justify-center')} onClick={onToggleTheme}>
+          {themeLabel}
+        </button>
+        {signedIn ? (
+          <div className="mt-3 flex justify-center">
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2">
+            <SignInButton mode="modal">
+              <button type="button" className={buttonSecondary}>Sign In</button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button type="button" className={buttonPrimary}>Start Free</button>
+            </SignUpButton>
+          </div>
+        )}
+      </div>
     </aside>
+  );
+}
+
+export function PrimaryNavigation({
+  pathname,
+  onNavigate,
+  signedIn,
+  themeLabel,
+  onToggleTheme,
+}: PrimaryNavigationProps): ReactElement {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  return (
+    <>
+      <aside className="hidden border-r border-slate-200/90 bg-white/70 lg:block dark:border-slate-800 dark:bg-slate-950/40">
+        <div className="sticky top-0 h-screen overflow-y-auto p-5">
+          <NavigationPanel
+            pathname={pathname}
+            onNavigate={onNavigate}
+            signedIn={signedIn}
+            themeLabel={themeLabel}
+            onToggleTheme={onToggleTheme}
+          />
+        </div>
+      </aside>
+
+      <div className="lg:hidden">
+        <button
+          type="button"
+          className={cn(
+            buttonGhost,
+            'fixed left-4 top-4 z-40 border border-slate-200 bg-white/95 px-4 py-2 shadow-md dark:border-slate-700 dark:bg-slate-900/95'
+          )}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="mobile-sidebar-menu"
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          Menu
+        </button>
+        {mobileMenuOpen ? (
+          <div className="fixed inset-0 z-50">
+            <button
+              type="button"
+              aria-label="Close menu"
+              className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div id="mobile-sidebar-menu" className="absolute inset-y-0 left-0 w-[min(90vw,360px)] p-4">
+              <NavigationPanel
+                pathname={pathname}
+                onNavigate={onNavigate}
+                signedIn={signedIn}
+                themeLabel={themeLabel}
+                onToggleTheme={onToggleTheme}
+                onClose={() => setMobileMenuOpen(false)}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 

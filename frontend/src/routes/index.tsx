@@ -3,22 +3,19 @@ import type { ReactElement, ReactNode } from 'react';
 
 import type { SignedAppProps } from '../shared/types';
 import { buttonSecondary, cn, sectionClass } from '../shared/ui-utils';
-import { Header, PageIntro, Sidebar } from '../components/layout/app-shell';
-import { ExamplesPage } from '../components/examples/examples-page';
+import { PageIntro, PrimaryNavigation } from '../components/layout/app-shell';
+import { ExamplesRoutePage } from './examples';
+import { LandingPage } from './landing';
+import { PricingPage } from './pricing';
+import { ProductCatalogPage, ProductDetailPage } from './products';
+import { CheckoutStatePage } from './checkout';
+import { AccountDashboard } from './app/dashboard';
 import {
-  CheckoutState,
-  MarketingHome,
-  PricingPage,
-  ProductCatalog,
-  ProductDetail,
-} from './public/routes';
-import {
-  AccountDashboard,
-  BookingsPage,
-  DownloadsPage,
-  PurchasesPage,
-  SubscriptionsPage,
-} from './app/routes';
+  AccountBookingsPage,
+  AccountDownloadsPage,
+  AccountPurchasesPage,
+  AccountSubscriptionsPage,
+} from './app/account';
 
 function AppFrame({
   pathname,
@@ -31,20 +28,15 @@ function AppFrame({
   return (
     <main className="w-full pb-20 lg:pb-24">
       <div className="lg:grid lg:min-h-screen lg:grid-cols-[280px,minmax(0,1fr)]">
-        <div className="hidden border-r border-slate-200/90 bg-white/70 lg:block dark:border-slate-800 dark:bg-slate-950/40">
-          <div className="sticky top-0 h-screen overflow-y-auto p-5">
-            <Sidebar pathname={pathname} onNavigate={onNavigate} signedIn={signedIn} />
-          </div>
-        </div>
-        <section className="min-w-0 px-4 pt-6 sm:px-6 lg:px-10 lg:pt-7 xl:px-12">
-          <Header
-            pathname={pathname}
-            onNavigate={onNavigate}
-            signedIn={signedIn}
-            themeLabel={themeLabel}
-            onToggleTheme={onToggleTheme}
-          />
-          <div className="mt-6 space-y-6">{content}</div>
+        <PrimaryNavigation
+          pathname={pathname}
+          onNavigate={onNavigate}
+          signedIn={signedIn}
+          themeLabel={themeLabel}
+          onToggleTheme={onToggleTheme}
+        />
+        <section className="min-w-0 px-4 pt-20 sm:px-6 lg:px-10 lg:pt-7 xl:px-12">
+          <div className="space-y-6">{content}</div>
         </section>
       </div>
     </main>
@@ -55,7 +47,7 @@ export function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }
   const hiddenCatalogPath = pathname === '/pricing' || pathname === '/products' || pathname.startsWith('/products/');
   const normalizedPath = hiddenCatalogPath ? '/' : pathname;
   const content = pathname === '/examples' ? (
-    <ExamplesPage onNavigate={onNavigate} />
+    <ExamplesRoutePage onNavigate={onNavigate} />
   ) : hiddenCatalogPath ? (
     <>
       <section className={cn(sectionClass, 'border-amber-300 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-900/20')}>
@@ -65,10 +57,10 @@ export function SignedOutApp({ pathname, onNavigate, themeLabel, onToggleTheme }
           description="Sign in to configure offers and verify checkout plus fulfillment from account routes."
         />
       </section>
-      <MarketingHome />
+      <LandingPage />
     </>
   ) : (
-    <MarketingHome />
+    <LandingPage />
   );
 
   return (
@@ -92,23 +84,23 @@ export function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }:
   if (pathname === '/pricing') {
     content = <PricingPage signedIn />;
   } else if (pathname === '/products') {
-    content = <ProductCatalog onNavigate={onNavigate} />;
+    content = <ProductCatalogPage onNavigate={onNavigate} />;
   } else if (pathname === '/examples') {
-    content = <ExamplesPage onNavigate={onNavigate} />;
+    content = <ExamplesRoutePage onNavigate={onNavigate} />;
   } else if (isProductDetail && productSlug) {
-    content = <ProductDetail slug={productSlug} signedIn onNavigate={onNavigate} getToken={getToken} />;
+    content = <ProductDetailPage slug={productSlug} signedIn onNavigate={onNavigate} getToken={getToken} />;
   } else if (pathname === '/account/purchases') {
-    content = <PurchasesPage getToken={getToken} onNavigate={onNavigate} />;
+    content = <AccountPurchasesPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/account/subscriptions') {
-    content = <SubscriptionsPage getToken={getToken} onNavigate={onNavigate} />;
+    content = <AccountSubscriptionsPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/account/downloads') {
-    content = <DownloadsPage getToken={getToken} onNavigate={onNavigate} />;
+    content = <AccountDownloadsPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/account/bookings') {
-    content = <BookingsPage getToken={getToken} onNavigate={onNavigate} />;
+    content = <AccountBookingsPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/checkout/success') {
-    content = <CheckoutState state="success" onNavigate={onNavigate} />;
+    content = <CheckoutStatePage state="success" onNavigate={onNavigate} />;
   } else if (pathname === '/checkout/cancel') {
-    content = <CheckoutState state="cancel" onNavigate={onNavigate} />;
+    content = <CheckoutStatePage state="cancel" onNavigate={onNavigate} />;
   } else if (pathname !== '/' && pathname !== '/app') {
     content = (
       <section className={sectionClass}>

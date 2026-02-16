@@ -1,6 +1,10 @@
 # Frontend Module Layout
 
-The frontend is intentionally split into route modules, reusable UI components, and shared helpers so React developers can navigate it quickly.
+The frontend is structured for fast onboarding by both humans and coding agents:
+
+- `routes/*` follows URL hierarchy
+- `components/*` contains reusable UI primitives
+- `shared/*` contains cross-route types and helpers
 
 ## Entry points
 
@@ -9,22 +13,45 @@ The frontend is intentionally split into route modules, reusable UI components, 
 
 ## Folder architecture
 
-- `routes`: route composition and page modules
-- `components`: reusable UI building blocks
+- `routes`: URL-first route modules and route-specific sections
+- `components`: reusable cross-route UI (layout shell, feedback, primitives)
 - `shared`: shared types and style helpers
 - `lib`: API and app-level utility modules
-- `public`: static assets copied by Vite at build time
+- `./frontend/public/`: static assets copied by Vite at build time
 
-## Core route modules
+## Route hierarchy (URL aligned)
 
-- `./frontend/src/routes/index.tsx`
-- `./frontend/src/routes/public/routes.tsx`
-- `./frontend/src/routes/app/routes.tsx`
+- `/` -> `./frontend/src/routes/landing/page.tsx`
+- `/pricing` -> `./frontend/src/routes/pricing/page.tsx`
+- `/products` -> `./frontend/src/routes/products/catalog-page.tsx`
+- `/products/:slug` -> `./frontend/src/routes/products/detail-page.tsx`
+- `/checkout/success` and `/checkout/cancel` -> `./frontend/src/routes/checkout/state-page.tsx`
+- `/app` -> `./frontend/src/routes/app/dashboard/page.tsx`
+- `/account/purchases` -> `./frontend/src/routes/app/account/purchases-page.tsx`
+- `/account/subscriptions` -> `./frontend/src/routes/app/account/subscriptions-page.tsx`
+- `/account/downloads` -> `./frontend/src/routes/app/account/downloads-page.tsx`
+- `/account/bookings` -> `./frontend/src/routes/app/account/bookings-page.tsx`
+- `/examples` -> `./frontend/src/routes/examples/page.tsx`
 
-## Shared component modules
+`./frontend/src/routes/index.tsx` owns app-level route matching and shell composition.
 
-- `./frontend/src/components/layout/app-shell.tsx`
-- `./frontend/src/components/feedback/toast.tsx`
+## Reusable components
+
+- Layout shell and navigation: `./frontend/src/components/layout/app-shell.tsx`
+- Toast notifications and feedback: `./frontend/src/components/feedback/toast.tsx`
+
+## Layout and navigation behavior
+
+- Desktop (`lg` and up):
+  - Left sidebar is pinned in a dedicated rail.
+  - All primary navigation links live in the sidebar.
+  - Theme/auth controls live in the sidebar.
+- Mobile and tablet (`< lg`):
+  - Sidebar opens as a drawer using a simple `Menu` button.
+  - Route change closes the drawer automatically.
+- Contract:
+  - One navigation source of truth: sidebar content.
+  - No duplicate top navbar navigation.
 
 ## Shared helper modules
 
@@ -32,28 +59,6 @@ The frontend is intentionally split into route modules, reusable UI components, 
 - `./frontend/src/shared/ui-utils.ts`
 - `./frontend/src/lib/api.ts`
 - `./frontend/src/lib/signals.ts`
-
-## Example-only modules
-
-Everything non-essential for production UX lives here:
-
-- `./frontend/src/components/examples/examples-page.tsx`
-- `./frontend/src/components/examples/frontend-backend-examples.tsx`
-- `./frontend/src/components/examples/signal-sandbox-example.tsx`
-
-Route: `/examples`
-
-## Key routes
-
-- `/` marketing landing surface
-- `/app` preflight and account dashboard
-- `/products` and `/products/:slug` offer flow
-- `/pricing` Clerk pricing flow
-- `/account/purchases`
-- `/account/subscriptions`
-- `/account/downloads`
-- `/account/bookings`
-- `/examples`
 
 ## Frontend to backend examples
 
@@ -80,7 +85,9 @@ const usage = await authedRequest(getToken, '/ai/usage/summary/');
 
 ## UX rules
 
-1. Show explicit feedback for actions.
+1. Show explicit feedback for async actions.
 2. Do not rely on console logs for user state awareness.
 3. Keep pricing data server-driven.
-4. Keep all optional demos in `/examples`.
+4. Keep optional demos under `routes/examples/*`.
+5. Keep navigation singular per breakpoint: sidebar rail on desktop, sidebar drawer on mobile.
+6. Keep navigation definitions in one place inside `components/layout/app-shell.tsx`.

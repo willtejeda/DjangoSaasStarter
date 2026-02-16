@@ -152,21 +152,6 @@ export interface SupabaseProbeResponse {
   profile?: unknown;
 }
 
-export interface NavLinkProps {
-  to: string;
-  currentPath: string;
-  onNavigate: NavigateFn;
-  children: ReactNode;
-}
-
-export interface HeaderProps {
-  pathname: string;
-  onNavigate: NavigateFn;
-  signedIn: boolean;
-  themeLabel: string;
-  onToggleTheme: () => void;
-}
-
 export interface PricingPageProps {
   signedIn: boolean;
 }

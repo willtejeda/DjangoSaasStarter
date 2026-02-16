@@ -1,14 +1,14 @@
 import type { ReactElement } from 'react';
 
+import { buttonSecondary, cardClass, sectionClass } from '../../shared/ui-utils';
 import { FrontendBackendExamples } from './frontend-backend-examples';
 import { SignalSandboxExample } from './signal-sandbox-example';
-import { buttonSecondary, cardClass, sectionClass } from '../../shared/ui-utils';
 
-interface ExamplesPageProps {
+interface ExamplesRoutePageProps {
   onNavigate: (nextPath: string) => void;
 }
 
-export function ExamplesPage({ onNavigate }: ExamplesPageProps): ReactElement {
+export function ExamplesRoutePage({ onNavigate }: ExamplesRoutePageProps): ReactElement {
   return (
     <section className={`${sectionClass} space-y-8`}>
       <header className="space-y-3">

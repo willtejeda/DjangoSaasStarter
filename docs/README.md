@@ -6,6 +6,7 @@ This is the working wiki for builders, operators, and AI agents.
 
 - `./README.md`
 - `./AGENTS.md`
+- `./frontend/src/README.md`
 
 ## Wiki order
 
@@ -20,7 +21,8 @@ This is the working wiki for builders, operators, and AI agents.
 9. `./docs/09-agent-frameworks-2026.md`
 10. `./docs/10-agent-framework-examples.md`
 11. `./docs/11-name-ideas.md`
-12. `./docs/StackAnalysis.md`
+12. `./docs/12-frontend-starter-blueprint.md`
+13. `./docs/StackAnalysis.md`
 
 ## Philosophy
 

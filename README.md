@@ -70,7 +70,20 @@ Read in this order:
 10. `./docs/09-agent-frameworks-2026.md`
 11. `./docs/10-agent-framework-examples.md`
 12. `./docs/11-name-ideas.md`
-13. `./docs/StackAnalysis.md`
+13. `./docs/12-frontend-starter-blueprint.md`
+14. `./docs/StackAnalysis.md`
+
+## Doc quick links by task
+
+- First revenue loop: `./docs/02-first-revenue-loop.md`
+- API endpoint lookup: `./docs/03-api-cheatsheet.md`
+- Customizing routes and modules: `./docs/05-customize-template.md`
+- Resend email templates and delivery test: `./docs/06-resend-transactional-email.md`
+- Agent workflow and skills: `./docs/07-agent-skills-playbook.md`
+- Security pass details: `./docs/08-security-pass-phase-1.md`
+- Agent framework comparison: `./docs/09-agent-frameworks-2026.md`
+- Agent framework code examples: `./docs/10-agent-framework-examples.md`
+- Frontend route and component blueprint: `./docs/12-frontend-starter-blueprint.md`
 
 ## Quick start
 
@@ -110,13 +123,25 @@ npm run build
 
 - App bootstrap: `./frontend/src/app.tsx`
 - Route composition: `./frontend/src/routes/index.tsx`
-- Public and shared pages: `./frontend/src/routes/public/routes.tsx`
-- Signed-in app pages: `./frontend/src/routes/app/routes.tsx`
+- Landing page route: `./frontend/src/routes/landing/page.tsx`
+- Pricing route: `./frontend/src/routes/pricing/page.tsx`
+- Product routes: `./frontend/src/routes/products/`
+- Signed-in dashboard route: `./frontend/src/routes/app/dashboard/page.tsx`
+- Signed-in account routes: `./frontend/src/routes/app/account/`
+- Examples route: `./frontend/src/routes/examples/page.tsx`
 - Layout components: `./frontend/src/components/layout/app-shell.tsx`
 - Feedback components: `./frontend/src/components/feedback/toast.tsx`
 - API client: `./frontend/src/lib/api.ts`
 - Shared helper modules: `./frontend/src/shared/`
-- Example modules: `./frontend/src/components/examples/`
+- Static assets: `./frontend/public/`
+
+## Frontend UX layout contract
+
+- Desktop (`lg` and up): persistent left sidebar is the navigation surface.
+- Mobile and tablet (`< lg`): the same sidebar content opens via a hamburger-triggered drawer.
+- Keep navigation in one place (sidebar content), not split between sidebar and top navbar.
+- The app shell should use full-width content with a dedicated left rail, not a centered fixed-width canvas.
+- Keep route orchestration in `./frontend/src/routes/index.tsx` and shared nav primitives in `./frontend/src/components/layout/app-shell.tsx`.
 
 ## Backend map
 
@@ -130,3 +155,11 @@ npm run build
 
 - Agent contract: `./AGENTS.md`
 - Agent skill templates: `./agent-skills/README.md`
+
+## TODO (Phase 2)
+
+- Build a production-safe coding agent widget with guarded dev-only access and OpenRouter-compatible providers.
+- Track evaluation and framework decision updates in:
+  - `./docs/09-agent-frameworks-2026.md`
+  - `./docs/10-agent-framework-examples.md`
+  - `./docs/07-agent-skills-playbook.md`
