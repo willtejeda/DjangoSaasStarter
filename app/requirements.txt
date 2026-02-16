@@ -1,0 +1,6 @@
+supabase
+clerk-backend-api
+django
+django-rest-framework
+django-cors-headers
+python-decouple
