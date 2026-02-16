@@ -36,6 +36,50 @@ import {
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const PREFLIGHT_EMAIL_STORAGE_KEY = 'ds-preflight-email-test';
 
+function isInternalClerkLikeId(value: string): boolean {
+  const normalized = value.trim();
+  return /^user_[A-Za-z0-9]+$/.test(normalized);
+}
+
+function normalizeDisplayLabel(value?: string | null): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (isInternalClerkLikeId(normalized)) {
+    return '';
+  }
+  return normalized;
+}
+
+function firstNameFromFullName(fullName?: string | null): string {
+  const normalized = normalizeDisplayLabel(fullName);
+  if (!normalized) {
+    return '';
+  }
+  return normalized.split(/\s+/)[0] || '';
+}
+
+function friendlyNameFromEmail(email?: string | null): string {
+  const normalizedEmail = String(email || '').trim();
+  if (!normalizedEmail) {
+    return '';
+  }
+  const localPart = normalizedEmail.split('@')[0]?.trim() || '';
+  if (!localPart || isInternalClerkLikeId(localPart)) {
+    return '';
+  }
+  const words = localPart
+    .replace(/[._-]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!words.length) {
+    return '';
+  }
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
 export function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElement {
   const notify = useToast();
   const { isLoaded, userId } = useAuth();
@@ -234,14 +278,17 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
 
   const enabledFeatures: string[] = billing.enabled_features || me?.billing_features || [];
   const planTier = isPlanTier(me?.profile?.plan_tier) ? me.profile.plan_tier : inferPlanFromFeatures(enabledFeatures);
+  const primaryEmail = String(user?.primaryEmailAddress?.emailAddress || '').trim();
   const displayName =
-    me?.customer_account?.full_name ||
-    user?.firstName ||
-    me?.profile?.first_name ||
-    user?.primaryEmailAddress?.emailAddress ||
-    user?.username ||
-    user?.id ||
-    'there';
+    firstNameFromFullName(me?.customer_account?.full_name)
+    || normalizeDisplayLabel(user?.firstName)
+    || normalizeDisplayLabel(me?.profile?.first_name)
+    || firstNameFromFullName(friendlyNameFromEmail(primaryEmail))
+    || 'creator';
+  const accountIdentityLabel =
+    primaryEmail
+    || normalizeDisplayLabel(user?.username)
+    || displayName;
 
   const paidOrders = useMemo(() => orders.filter((order) => ['paid', 'fulfilled'].includes(order.status)).length, [orders]);
 
@@ -748,7 +795,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
         </p>
         {user ? (
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Signed in as {user.primaryEmailAddress?.emailAddress || user.username || user.id}
+            Signed in as {accountIdentityLabel}
           </p>
         ) : null}
       </section>
