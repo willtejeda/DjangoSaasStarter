@@ -114,6 +114,12 @@ frontend/
   src/
 ```
 
+Code organization references:
+
+- Backend API module map: `backend/api/README.md`
+- Backend tools map: `backend/api/tools/README.md`
+- Frontend module map: `frontend/src/README.md`
+
 ## Quick Start
 
 ### 1) Backend

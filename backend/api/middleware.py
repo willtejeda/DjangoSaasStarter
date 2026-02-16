@@ -47,7 +47,7 @@ class ClerkUserMiddleware:
             return None
 
         try:
-            from .clerk_client import get_clerk_user
+            from .tools.auth.clerk import get_clerk_user
 
             request.clerk_user = get_clerk_user(clerk_user_id)
         except Exception:

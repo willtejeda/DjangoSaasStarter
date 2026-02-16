@@ -15,12 +15,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..block_storage import (
+from ..tools.storage.block_storage import (
     BlockStorageConfigurationError,
     BlockStorageError,
     build_digital_asset_download_url,
 )
-from ..emails import (
+from ..tools.email.resend import (
     resend_is_configured,
     send_booking_requested_email,
     send_order_fulfilled_email,

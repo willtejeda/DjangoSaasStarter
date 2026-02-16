@@ -17,7 +17,7 @@ from ..serializers import (
     ProfileSerializer,
     ProjectSerializer,
 )
-from ..supabase_client import SupabaseConfigurationError, get_supabase_client
+from ..tools.database.supabase import SupabaseConfigurationError, get_supabase_client
 from .helpers import (
     _build_ai_provider_payload,
     _build_usage_bucket,
@@ -224,7 +224,7 @@ class ClerkUserView(APIView):
             )
 
         try:
-            from ..clerk_client import ClerkClientError, get_clerk_user
+            from ..tools.auth.clerk import ClerkClientError, get_clerk_user
 
             user = get_clerk_user(clerk_user_id)
         except ClerkClientError as exc:

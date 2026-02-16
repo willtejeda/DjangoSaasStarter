@@ -13,6 +13,50 @@ import { useSignalEffect } from '@preact/signals-react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 
+import {
+  type AiProviderRecord,
+  type AiUsageBucketRecord,
+  type AiUsageSummaryResponse,
+  type BillingFeaturesResponse,
+  type BookingRecord,
+  type CheckoutStateProps,
+  type DashboardProps,
+  type DownloadAccessResponse,
+  type DownloadGrant,
+  type EntitlementRecord,
+  type GetTokenFn,
+  type HeaderProps,
+  type Id,
+  type MeResponse,
+  type MetricCardProps,
+  type NavLinkProps,
+  type NavigateFn,
+  type OrderCreateResponse,
+  type OrderRecord,
+  type PageIntroProps,
+  type PlanTier,
+  type PricingPageProps,
+  type PreflightEmailResponse,
+  type ProductCatalogProps,
+  type ProductDetailProps,
+  type ProductRecord,
+  type SignedAppProps,
+  type SubscriptionRecord,
+  type TokenNavigateProps,
+  type TutorialBlockProps,
+} from './features/app-shell/types';
+import {
+  buttonGhost,
+  buttonPrimary,
+  buttonSecondary,
+  cardClass,
+  cn,
+  formatCurrencyFromCents,
+  inferPlanFromFeatures,
+  isPlanTier,
+  sectionClass,
+  statusPillClasses,
+} from './features/app-shell/ui-utils';
 import { apiRequest, authedRequest, getApiBaseUrl } from './lib/api';
 import {
   THEME_STORAGE_KEY,
@@ -30,276 +74,6 @@ const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '')
 const ENABLE_DEV_MANUAL_CHECKOUT =
   (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
 const PREFLIGHT_EMAIL_STORAGE_KEY = 'ds-preflight-email-test';
-
-type Id = number | string;
-type NavigateFn = (nextPath: string) => void;
-type CheckoutStateValue = 'success' | 'cancel';
-type PlanTier = 'free' | 'pro' | 'enterprise';
-type GetTokenFn = ReturnType<typeof useAuth>['getToken'];
-
-interface ActivePrice {
-  amount_cents: number;
-  currency: string;
-}
-
-interface ProductPrice {
-  id: Id;
-  name?: string | null;
-  billing_period: string;
-  amount_cents: number;
-  currency: string;
-}
-
-interface ProductAsset {
-  id: Id;
-  title: string;
-}
-
-interface ServiceOffer {
-  session_minutes: number;
-  delivery_days: number;
-  revision_count: number;
-}
-
-interface ProductRecord {
-  id: Id;
-  slug: string;
-  name: string;
-  product_type: string;
-  tagline?: string | null;
-  description?: string | null;
-  active_price?: ActivePrice | null;
-  prices?: ProductPrice[];
-  assets?: ProductAsset[];
-  service_offer?: ServiceOffer | null;
-}
-
-interface OrderRecord {
-  public_id: string;
-  status: string;
-  total_cents: number;
-  currency: string;
-  items?: unknown[];
-}
-
-interface OrderCreateResponse {
-  checkout?: {
-    checkout_url?: string | null;
-  } | null;
-  order?: {
-    public_id?: string | null;
-  } | null;
-}
-
-interface PriceSummary {
-  amount_cents: number;
-  currency: string;
-  billing_period: string;
-}
-
-interface SubscriptionRecord {
-  id: Id;
-  product_name?: string | null;
-  status: string;
-  price_summary?: PriceSummary | null;
-}
-
-interface DownloadGrant {
-  token: string;
-  asset_title: string;
-  can_download: boolean;
-  product_name: string;
-  download_count: number;
-  max_downloads: number;
-}
-
-interface DownloadAccessResponse {
-  download_url?: string | null;
-}
-
-interface BookingRecord {
-  id: Id;
-  product_name?: string | null;
-  status: string;
-  customer_notes?: string | null;
-}
-
-interface EntitlementRecord {
-  id: Id;
-  feature_key: string;
-  is_current: boolean;
-}
-
-interface MeResponse {
-  customer_account?: {
-    full_name?: string | null;
-    metadata?: Record<string, unknown> | null;
-  } | null;
-  profile?: {
-    plan_tier?: string | null;
-    first_name?: string | null;
-  } | null;
-  billing_features?: string[] | null;
-}
-
-interface BillingFeaturesResponse {
-  enabled_features: string[];
-}
-
-interface AiProviderRecord {
-  key: string;
-  label: string;
-  kind: string;
-  enabled: boolean;
-  base_url: string;
-  model_hint?: string | null;
-  docs_url: string;
-  env_vars: string[];
-}
-
-interface AiUsageBucketRecord {
-  key: string;
-  label: string;
-  used: number;
-  limit: number | null;
-  unit: string;
-  reset_window: string;
-  percent_used: number | null;
-  near_limit: boolean;
-}
-
-interface AiUsageSummaryResponse {
-  period: string;
-  plan_tier: string;
-  buckets: AiUsageBucketRecord[];
-  notes: string[];
-}
-
-interface NavLinkProps {
-  to: string;
-  currentPath: string;
-  onNavigate: NavigateFn;
-  children: ReactNode;
-}
-
-interface HeaderProps {
-  pathname: string;
-  onNavigate: NavigateFn;
-  signedIn: boolean;
-  expandedNav: boolean;
-  themeLabel: string;
-  onToggleTheme: () => void;
-}
-
-interface PricingPageProps {
-  signedIn: boolean;
-}
-
-interface ProductCatalogProps {
-  onNavigate: NavigateFn;
-}
-
-interface ProductDetailProps {
-  slug: string;
-  signedIn: boolean;
-  onNavigate: NavigateFn;
-  getToken: GetTokenFn;
-}
-
-interface TokenProps {
-  getToken: GetTokenFn;
-}
-
-interface TokenNavigateProps extends TokenProps {
-  onNavigate: NavigateFn;
-}
-
-interface CheckoutStateProps {
-  state: CheckoutStateValue;
-  onNavigate: NavigateFn;
-}
-
-interface MetricCardProps {
-  label: string;
-  value: string;
-  note: string;
-}
-
-interface NavigateProps {
-  onNavigate: NavigateFn;
-}
-
-interface DashboardProps extends NavigateProps {
-  getToken: GetTokenFn;
-}
-
-interface PreflightEmailResponse {
-  sent: boolean;
-  detail: string;
-  recipient_email?: string;
-  sent_at?: string;
-}
-
-interface SignedAppProps {
-  pathname: string;
-  onNavigate: NavigateFn;
-  themeLabel: string;
-  onToggleTheme: () => void;
-}
-
-interface PageIntroProps {
-  eyebrow: string;
-  title: string;
-  description: string;
-  actions?: ReactNode;
-}
-
-interface TutorialBlockProps {
-  whatThisDoes: string;
-  howToTest: string[];
-  expectedResult: string;
-}
-
-function cn(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(' ');
-}
-
-const buttonBase =
-  'inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-60';
-const buttonPrimary =
-  `${buttonBase} bg-slate-950 text-white shadow-sm hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300`;
-const buttonSecondary =
-  `${buttonBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800`;
-const buttonGhost =
-  `${buttonBase} border border-transparent bg-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`;
-const sectionClass =
-  'rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80';
-const cardClass =
-  'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900';
-
-function formatCurrencyFromCents(cents: number, currency = 'USD'): string {
-  const numeric = Number(cents || 0) / 100;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(numeric);
-}
-
-function inferPlanFromFeatures(features: ReadonlyArray<string | null | undefined> | null | undefined): PlanTier {
-  const normalized = new Set((features || []).map((item) => String(item).toLowerCase()));
-  if (normalized.has('enterprise')) {
-    return 'enterprise';
-  }
-  if (normalized.has('pro') || normalized.has('premium') || normalized.has('growth')) {
-    return 'pro';
-  }
-  return 'free';
-}
-
-function isPlanTier(value: string | null | undefined): value is PlanTier {
-  return value === 'free' || value === 'pro' || value === 'enterprise';
-}
 
 function usePathname(): { pathname: string; navigate: NavigateFn } {
   const [pathname, setPathname] = useState<string>(() => window.location.pathname || '/');
@@ -320,20 +94,6 @@ function usePathname(): { pathname: string; navigate: NavigateFn } {
   };
 
   return { pathname, navigate };
-}
-
-function statusPillClasses(status: string): string {
-  const normalized = (status || '').toLowerCase();
-  if (['paid', 'fulfilled', 'active', 'trialing', 'ready', 'confirmed', 'completed', 'digital'].includes(normalized)) {
-    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-  }
-  if (['pending_payment', 'requested', 'service', 'past_due', 'incomplete'].includes(normalized)) {
-    return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
-  }
-  if (['canceled', 'refunded', 'paused', 'locked'].includes(normalized)) {
-    return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-  }
-  return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
 }
 
 function StatusPill({ value }: { value: string }): ReactElement {

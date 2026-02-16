@@ -1,9 +1,5 @@
-"""Compatibility shim for Clerk auth helpers.
-
-Canonical location: api.tools.auth.clerk
-"""
-
-from .tools.auth.clerk import (
+from .authentication import ClerkJWTAuthentication, ClerkPrincipal
+from .clerk import (
     ClerkClientError,
     ClerkConfigurationError,
     authorized_party_matches,
@@ -13,6 +9,8 @@ from .tools.auth.clerk import (
 )
 
 __all__ = [
+    "ClerkJWTAuthentication",
+    "ClerkPrincipal",
     "ClerkClientError",
     "ClerkConfigurationError",
     "authorized_party_matches",

@@ -44,7 +44,7 @@ class ClerkJWTAuthenticationTests(SimpleTestCase):
         request = self.factory.get("/api/me/")
         self.assertIsNone(self.authentication.authenticate(request))
 
-    @patch("api.authentication.decode_clerk_token")
+    @patch("api.tools.auth.authentication.decode_clerk_token")
     def test_reads_bearer_token(self, decode_token):
         decode_token.return_value = {"sub": "user_123", "email": "person@example.com"}
         request = self.factory.get(
@@ -57,7 +57,7 @@ class ClerkJWTAuthenticationTests(SimpleTestCase):
         self.assertEqual(claims["email"], "person@example.com")
         self.assertEqual(request.clerk_token, "test-token")
 
-    @patch("api.authentication.decode_clerk_token")
+    @patch("api.tools.auth.authentication.decode_clerk_token")
     def test_reads_session_cookie_token(self, decode_token):
         decode_token.return_value = {"sub": "user_cookie"}
         request = self.factory.get("/api/me/")
@@ -67,7 +67,7 @@ class ClerkJWTAuthenticationTests(SimpleTestCase):
         self.assertEqual(user.clerk_user_id, "user_cookie")
         self.assertEqual(request.clerk_token, "cookie-token")
 
-    @patch("api.authentication.decode_clerk_token")
+    @patch("api.tools.auth.authentication.decode_clerk_token")
     def test_cookie_auth_requires_csrf_for_unsafe_method(self, decode_token):
         decode_token.return_value = {"sub": "user_cookie"}
         request = self.factory.post("/api/projects/", data={"name": "x"}, format="json")
@@ -76,7 +76,7 @@ class ClerkJWTAuthenticationTests(SimpleTestCase):
         with self.assertRaises(PermissionDenied):
             self.authentication.authenticate(request)
 
-    @patch("api.authentication.decode_clerk_token")
+    @patch("api.tools.auth.authentication.decode_clerk_token")
     def test_cookie_auth_accepts_valid_csrf_for_unsafe_method(self, decode_token):
         decode_token.return_value = {"sub": "user_cookie"}
         csrf_token = "a" * 32
@@ -314,7 +314,7 @@ class ProjectApiTests(TestCase):
         }
 
     def _request(self, method: str, path: str, data=None):
-        with patch("api.authentication.decode_clerk_token", return_value=self.claims):
+        with patch("api.tools.auth.authentication.decode_clerk_token", return_value=self.claims):
             handler = getattr(self.client, method)
             return handler(path, data=data, format="json", **self.auth_headers)
 
@@ -486,7 +486,7 @@ class CommerceApiTests(TestCase):
         }
 
     def _request(self, method: str, path: str, data=None):
-        with patch("api.authentication.decode_clerk_token", return_value=self.claims):
+        with patch("api.tools.auth.authentication.decode_clerk_token", return_value=self.claims):
             handler = getattr(self.client, method)
             return handler(path, data=data, format="json", **self.auth_headers)
 
@@ -696,7 +696,7 @@ class CommerceApiTests(TestCase):
         SUPABASE_SERVICE_ROLE_KEY="service-role-key",
         SUPABASE_ANON_KEY="anon-key",
     )
-    @patch("api.block_storage.get_supabase_client")
+    @patch("api.tools.storage.block_storage.get_supabase_client")
     def test_download_access_returns_supabase_signed_url(self, mock_get_supabase_client):
         _, grant, asset = self._create_fulfilled_digital_order()
         storage_bucket = mock_get_supabase_client.return_value.storage.from_.return_value
@@ -745,7 +745,7 @@ class CommerceApiTests(TestCase):
         ASSET_STORAGE_S3_ACCESS_KEY_ID="access-key",
         ASSET_STORAGE_S3_SECRET_ACCESS_KEY="secret-key",
     )
-    @patch("api.block_storage._cached_s3_client")
+    @patch("api.tools.storage.block_storage._cached_s3_client")
     def test_download_access_returns_s3_compatible_signed_url(self, mock_cached_s3_client):
         _, grant, asset = self._create_fulfilled_digital_order()
         mock_cached_s3_client.return_value.generate_presigned_url.return_value = (
@@ -920,7 +920,7 @@ class OrderConfirmSecurityTests(TestCase):
         )
 
     def _request(self, method: str, path: str, data=None):
-        with patch("api.authentication.decode_clerk_token", return_value=self.claims):
+        with patch("api.tools.auth.authentication.decode_clerk_token", return_value=self.claims):
             handler = getattr(self.client, method)
             return handler(path, data=data, format="json", **self.auth_headers)
 

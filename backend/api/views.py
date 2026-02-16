@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .emails import (
+from .tools.email.resend import (
     send_booking_requested_email,
     send_order_fulfilled_email,
     send_preflight_test_email,
