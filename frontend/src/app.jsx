@@ -138,122 +138,182 @@ function Header({ pathname, onNavigate, signedIn, theme, onToggleTheme }) {
 }
 
 function MarketingHome({ onNavigate }) {
+  const stackItems = [
+    'Django + DRF API core',
+    'Clerk auth and billing',
+    'Webhook-first payment sync',
+    'Digital + service fulfillment'
+  ];
+
+  const launchSteps = [
+    {
+      title: 'Shape your offer',
+      body: 'Define one clear promise, one buyer segment, and one starter price.'
+    },
+    {
+      title: 'Turn on checkout',
+      body: 'Use Clerk pricing and checkout with local order creation in Django.'
+    },
+    {
+      title: 'Deliver automatically',
+      body: 'Fulfill downloads, bookings, and entitlements when payment is verified.'
+    },
+    {
+      title: 'Scale with data',
+      body: 'Track paid conversions, active subscriptions, and retention features.'
+    }
+  ];
+
+  const promiseCards = [
+    {
+      title: 'From idea to paid flow quickly',
+      body: 'You get catalog, checkout, subscriptions, and post-purchase pages without writing boilerplate.'
+    },
+    {
+      title: 'Built for custom SaaS, not demos',
+      body: 'Start with a revenue-ready core, then customize offers, pages, and workflows to your niche.'
+    },
+    {
+      title: 'Safer payment lifecycle by default',
+      body: 'Payment confirmation is webhook-driven, so fulfillment logic stays server-side and auditable.'
+    }
+  ];
+
+  const comparisonRows = [
+    {
+      label: 'Checkout and payment truth',
+      win: 'Verified Clerk webhook events confirm orders before fulfillment.'
+    },
+    {
+      label: 'Monetization surfaces',
+      win: 'One-time offers, recurring plans, and service bookings in one template.'
+    },
+    {
+      label: 'Customer operations',
+      win: 'Built-in pages for purchases, subscriptions, downloads, and bookings.'
+    },
+    {
+      label: 'Seller operations',
+      win: 'Authenticated APIs to manage products, prices, assets, and service offers.'
+    }
+  ];
+
   return (
     <>
-      <header className="hero panel">
-        <div className="hero-layout">
-          <div className="hero-copy">
-            <div className="hero-chip">Django + Supabase + Clerk + Preact</div>
-            <h1>Turn ideas into paid AI and digital offers faster.</h1>
-            <p>
-              This starter ships the full revenue stack by default: checkout, subscriptions,
-              fulfillment, entitlements, downloads, and account lifecycle. Build and launch
-              experiments in days, not quarters.
+      <header className="panel landing-hero">
+        <div className="landing-grid">
+          <div className="landing-copy">
+            <div className="landing-chip">Revenue-Ready SaaS Starter Repo</div>
+            <h1>Launch a monetized SaaS foundation in days, then shape it into your product.</h1>
+            <p className="landing-subtitle">
+              DjangoStarter includes the paid product loop from day one: offers, checkout,
+              subscriptions, fulfillment, entitlements, and account management flows.
             </p>
-            <div className="hero-actions">
+            <div className="landing-actions">
               <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
-                Browse Products
+                Explore Live Offer Flow
               </button>
               <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
-                View Pricing
+                See Billing + Pricing
               </button>
             </div>
-            <div className="hero-proof">
-              <span>Subscription billing</span>
-              <span>Digital delivery</span>
-              <span>Service bookings</span>
-            </div>
+            <ul className="landing-signals">
+              <li>Production-minded payment flow contract</li>
+              <li>Seller APIs for fast catalog iteration</li>
+              <li>Customer dashboards for post-purchase retention</li>
+            </ul>
           </div>
-          <aside className="hero-aside">
-            <p className="eyebrow">Launch Blueprint</p>
-            <h3>Go from zero to first revenue loop</h3>
-            <ol className="sequence-list">
-              <li>Create your offer and pricing.</li>
-              <li>Collect payments with Clerk.</li>
-              <li>Deliver assets or services automatically.</li>
-              <li>Retain with entitlements and recurring plans.</li>
+
+          <aside className="landing-sidecard">
+            <p className="eyebrow">Execution Blueprint</p>
+            <h3>4 steps from template to first paying user</h3>
+            <ol className="landing-step-list">
+              {launchSteps.map((step, index) => (
+                <li className="landing-step" key={step.title}>
+                  <span className="landing-step-index">{index + 1}</span>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.body}</p>
+                  </div>
+                </li>
+              ))}
             </ol>
+            <div className="landing-kpis">
+              <article>
+                <p className="metric-label">Core APIs</p>
+                <h4>20+</h4>
+              </article>
+              <article>
+                <p className="metric-label">Revenue Modes</p>
+                <h4>3</h4>
+              </article>
+              <article>
+                <p className="metric-label">Default Focus</p>
+                <h4>Profit</h4>
+              </article>
+            </div>
           </aside>
         </div>
       </header>
 
-      <section className="panel stats-strip">
-        <article>
-          <p className="metric-label">Revenue Surfaces</p>
-          <h3>3</h3>
-          <p className="helper-text">One-time, subscription, and service delivery in one codebase.</p>
-        </article>
-        <article>
-          <p className="metric-label">Core APIs</p>
-          <h3>20+</h3>
-          <p className="helper-text">Catalog, checkout, downloads, bookings, and seller tooling.</p>
-        </article>
-        <article>
-          <p className="metric-label">Default Focus</p>
-          <h3>Profit</h3>
-          <p className="helper-text">Ship market tests and monetize before polishing edge cases.</p>
-        </article>
-      </section>
-
-      <section className="panel grid-three">
-        <article>
-          <h3>AI startup offers</h3>
-          <p>Package copilots, agents, and premium workflows into conversion-ready plans and add-ons.</p>
-        </article>
-        <article>
-          <h3>Creator products</h3>
-          <p>Sell templates, prompt packs, playbooks, and micro-courses with reliable fulfillment and access control.</p>
-        </article>
-        <article>
-          <h3>Service monetization</h3>
-          <p>Close higher-ticket offers with service bookings and a built-in customer operations portal.</p>
-        </article>
-      </section>
-
-      <section className="panel split-grid">
-        <article>
-          <h2>Default pages included</h2>
-          <ul className="check-grid">
-            <li>Landing page with conversion-first layout</li>
-            <li>Pricing with Clerk billing table integration</li>
-            <li>Public catalog and offer detail pages</li>
-            <li>Checkout success and cancellation states</li>
-            <li>Account portal for orders, downloads, subscriptions, bookings</li>
-          </ul>
-        </article>
-        <article>
-          <h2>Real-world readiness</h2>
-          <ul className="check-grid">
-            <li>Resend transactional email support</li>
-            <li>Webhook-driven subscription lifecycle sync</li>
-            <li>Entitlements for product and plan gating</li>
-            <li>S3-compatible or Supabase storage backends</li>
-            <li>Seller APIs for product operations</li>
-          </ul>
-        </article>
-      </section>
-
-      <section className="panel cta-panel">
-        <h2>Ready to ship your first paid experiment this week?</h2>
-        <p>Start with one product, one price point, and one retention path. Then iterate from customer behavior.</p>
-        <div className="hero-actions">
-          <button type="button" className="button button-primary" onClick={() => onNavigate('/pricing')}>
-            Configure Pricing
-          </button>
-          <button type="button" className="button button-secondary" onClick={() => onNavigate('/app')}>
-            Open App Dashboard
-          </button>
-        </div>
+      <section className="panel landing-stack">
+        {stackItems.map((item) => (
+          <div className="landing-stack-item" key={item}>
+            {item}
+          </div>
+        ))}
       </section>
 
       <section className="panel">
-        <h2>Execution checklist</h2>
+        <h2>Why this starter converts better than most templates</h2>
+        <p className="helper-text">
+          The point is not a pretty dashboard. The point is reaching paid customer behavior faster.
+        </p>
+        <div className="landing-promise-grid">
+          {promiseCards.map((card) => (
+            <article className="landing-promise-card" key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel landing-compare">
+        <h2>What is already wired for your custom SaaS</h2>
+        <div className="landing-compare-grid">
+          {comparisonRows.map((row) => (
+            <article className="landing-compare-row" key={row.label}>
+              <p className="landing-compare-label">{row.label}</p>
+              <p>{row.win}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel landing-final">
+        <div>
+          <p className="eyebrow">Ship Faster</p>
+          <h2>Use this repo as your paid SaaS base, then customize only what drives conversion.</h2>
+          <p className="helper-text">
+            Keep the default revenue rails, adapt the offer and messaging, and start validating with real buyers.
+          </p>
+        </div>
+        <div className="landing-final-actions">
+          <button type="button" className="button button-primary" onClick={() => onNavigate('/products')}>
+            Open Product Experience
+          </button>
+          <button type="button" className="button button-secondary" onClick={() => onNavigate('/pricing')}>
+            Launch Pricing Page
+          </button>
+          <button type="button" className="button button-ghost" onClick={() => onNavigate('/app')}>
+            View Account App
+          </button>
+        </div>
         <ul className="check-grid">
-          <li>Define one core offer and one clear transformation promise</li>
-          <li>Add baseline analytics and ad attribution before launch</li>
-          <li>Collect emails, run onboarding sequence, and test upgrade nudges</li>
-          <li>Measure conversion by traffic source and billing plan</li>
-          <li>Cut low ROI channels and double down on what closes customers</li>
+          <li>Test one-time purchase flow</li>
+          <li>Test subscription upgrade flow</li>
+          <li>Test webhook-driven fulfillment flow</li>
         </ul>
       </section>
     </>
