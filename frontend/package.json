@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.52.0",
+    "@clerk/clerk-react": "5.60.1",
     "preact": "^10.26.4"
   },
   "devDependencies": {

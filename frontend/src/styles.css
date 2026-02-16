@@ -437,13 +437,171 @@ select:focus {
   font-size: 0.83rem;
 }
 
+.site-header {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.site-brand {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--brand-ink);
+  cursor: pointer;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.site-link {
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 600;
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.64rem;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.site-link:hover {
+  background: rgba(29, 139, 122, 0.12);
+  color: #1d4f46;
+}
+
+.site-link-active {
+  background: rgba(29, 139, 122, 0.18);
+  color: #184b41;
+}
+
+.site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.product-card {
+  border: 1px solid var(--line);
+  border-radius: 0.82rem;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.95);
+  display: grid;
+  gap: 0.62rem;
+}
+
+.product-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.product-detail-head {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.pricing-shell {
+  padding: 0.3rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.order-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.order-card {
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.96);
+  display: grid;
+  gap: 0.48rem;
+}
+
+.warning-text {
+  color: #9b2d1d;
+}
+
+.success-text {
+  color: #1d6d42;
+}
+
+.pill-digital {
+  background: rgba(29, 139, 122, 0.16);
+  color: #15564c;
+}
+
+.pill-service {
+  background: rgba(111, 93, 204, 0.16);
+  color: #3d2fa2;
+}
+
+.pill-pending_payment {
+  background: rgba(231, 135, 54, 0.2);
+  color: #84461e;
+}
+
+.pill-paid,
+.pill-fulfilled,
+.pill-active,
+.pill-confirmed,
+.pill-completed {
+  background: rgba(41, 171, 85, 0.2);
+  color: #186a37;
+}
+
+.pill-canceled,
+.pill-refunded,
+.pill-paused,
+.pill-incomplete {
+  background: rgba(80, 97, 91, 0.16);
+  color: #304740;
+}
+
+.pill-past_due,
+.pill-trialing,
+.pill-requested {
+  background: rgba(231, 135, 54, 0.2);
+  color: #84461e;
+}
+
 @media (max-width: 980px) {
   .grid-three,
   .metrics-grid,
   .split-grid,
   .billing-example-grid,
-  .paywall-grid {
+  .paywall-grid,
+  .catalog-grid,
+  .pricing-grid {
     grid-template-columns: 1fr;
+  }
+
+  .site-header {
+    grid-template-columns: 1fr;
+  }
+
+  .site-actions {
+    justify-content: flex-start;
   }
 
   .topbar {

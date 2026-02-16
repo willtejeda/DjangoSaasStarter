@@ -8,7 +8,17 @@ from rest_framework.test import APIRequestFactory, APIClient
 
 from .authentication import ClerkJWTAuthentication
 from .clerk import authorized_party_matches
-from .models import Profile, Project
+from .models import (
+    DigitalAsset,
+    DownloadGrant,
+    Entitlement,
+    Order,
+    Price,
+    Product,
+    Profile,
+    Project,
+    Subscription,
+)
 from .supabase_client import _ensure_https
 from .views import extract_billing_features
 from .webhooks import (
@@ -383,3 +393,155 @@ class ProjectModelValidationTests(TestCase):
 
         with self.assertRaises(DjangoValidationError):
             Project.objects.create(owner=owner, name="   ", slug="")
+
+
+class CommerceApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.auth_headers = {"HTTP_AUTHORIZATION": "Bearer unit-test-token"}
+        self.claims = {
+            "sub": "buyer_123",
+            "email": "buyer@example.com",
+            "given_name": "Buyer",
+            "family_name": "User",
+            "entitlements": ["free"],
+        }
+
+    def _request(self, method: str, path: str, data=None):
+        with patch("api.authentication.decode_clerk_token", return_value=self.claims):
+            handler = getattr(self.client, method)
+            return handler(path, data=data, format="json", **self.auth_headers)
+
+    def test_public_catalog_only_returns_published_products(self):
+        owner = Profile.objects.create(clerk_user_id="seller_1", email="seller@example.com")
+        published = Product.objects.create(
+            owner=owner,
+            name="Launch Kit",
+            slug="launch-kit",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        Price.objects.create(
+            product=published,
+            name="One-time",
+            amount_cents=4900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+        draft = Product.objects.create(
+            owner=owner,
+            name="Draft Offer",
+            slug="draft-offer",
+            visibility=Product.Visibility.DRAFT,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        Price.objects.create(
+            product=draft,
+            name="Draft price",
+            amount_cents=9900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+        response = self.client.get("/api/products/")
+        self.assertEqual(response.status_code, 200)
+        slugs = [item["slug"] for item in response.data]
+        self.assertEqual(slugs, ["launch-kit"])
+
+    def test_create_and_confirm_order_generates_entitlements_and_downloads(self):
+        owner = Profile.objects.create(clerk_user_id="seller_2", email="seller2@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Creator Bundle",
+            slug="creator-bundle",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+            feature_keys=["priority_support", "templates_pack"],
+        )
+        price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=12900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+        product.active_price = price
+        product.save(update_fields=["active_price", "updated_at"])
+
+        DigitalAsset.objects.create(
+            product=product,
+            title="Bundle ZIP",
+            file_path="files/creator-bundle-v1.zip",
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1, "notes": "test purchase"},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        public_id = create_response.data["order"]["public_id"]
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_123"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        buyer_account = buyer_profile.customer_account
+        self.assertEqual(
+            Entitlement.objects.filter(customer_account=buyer_account, feature_key="priority_support").count(),
+            1,
+        )
+        self.assertEqual(DownloadGrant.objects.filter(customer_account=buyer_account).count(), 1)
+
+    def test_confirm_recurring_order_creates_subscription(self):
+        owner = Profile.objects.create(clerk_user_id="seller_3", email="seller3@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="AI Coach Pro",
+            slug="ai-coach-pro",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+            feature_keys=["ai_coach"],
+        )
+        price = Price.objects.create(
+            product=product,
+            name="Monthly",
+            amount_cents=2900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.MONTHLY,
+            is_default=True,
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "clerk", "external_id": "sub_clerk_123"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+
+        subscription = Subscription.objects.get(clerk_subscription_id="sub_clerk_123")
+        self.assertEqual(subscription.status, Subscription.Status.ACTIVE)
+        self.assertEqual(subscription.price_id, price.id)
