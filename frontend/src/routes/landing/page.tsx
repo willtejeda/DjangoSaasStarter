@@ -66,7 +66,7 @@ export function LandingPage(): ReactElement {
     {
       title: 'Service + automation',
       outcome: 'Bundle advisory, implementation, or done-for-you workflows.',
-      steps: ['Service offer', 'Booking records', 'Lifecycle notifications'],
+      steps: ['Service offer', 'Work order records', 'Lifecycle notifications'],
     },
   ];
 
@@ -115,7 +115,7 @@ export function LandingPage(): ReactElement {
             <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">What this means in practice</h2>
             <ul className="list-disc space-y-2 pl-5 text-sm text-slate-600 dark:text-slate-300">
               <li>Checkout events can not spoof paid state from the browser</li>
-              <li>Downloads, subscriptions, and bookings unlock after verified payment</li>
+              <li>Downloads, subscriptions, and work orders unlock after verified payment</li>
               <li>Your app ships with account pages users can trust</li>
               <li>Your agent can extend features without breaking the revenue loop</li>
             </ul>

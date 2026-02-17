@@ -8,7 +8,7 @@ DjangoStarter uses Resend for product lifecycle emails and keeps Clerk for auth 
 - Resend handles product lifecycle emails:
   - preflight test messages
   - order fulfilled notifications
-  - booking request notifications
+  - work order request notifications
   - your future offers and update campaigns
 
 ## Current implementation

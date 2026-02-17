@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.utils import timezone
 
-from ...models import Booking, CustomerAccount, Order
+from ...models import CustomerAccount, FulfillmentOrder, Order
 
 try:
     from premailer import transform as premailer_transform
@@ -219,46 +219,43 @@ def send_order_fulfilled_email(order: Order) -> bool:
     )
 
 
-def send_booking_requested_email(booking: Booking) -> bool:
+def send_fulfillment_order_requested_email(work_order: FulfillmentOrder) -> bool:
     recipients = _normalize_email_candidates(
         [
-            getattr(booking.customer_account, "billing_email", ""),
-            getattr(booking.customer_account.profile, "email", ""),
+            getattr(work_order.customer_account, "billing_email", ""),
+            getattr(work_order.customer_account.profile, "email", ""),
         ]
     )
     if not recipients:
         return False
 
-    product_name = _normalize_text(getattr(booking.service_offer.product, "name", "Service booking"))
-    session_minutes = int(getattr(booking.service_offer, "session_minutes", 0) or 0)
-    delivery_days = int(getattr(booking.service_offer, "delivery_days", 0) or 0)
+    product_name = _normalize_text(getattr(work_order.product, "name", "Custom order"))
+    delivery_mode = _normalize_text(getattr(work_order, "delivery_mode", "downloadable")).replace("_", " ")
     frontend_url = _normalize_url(getattr(settings, "FRONTEND_APP_URL", ""))
-    bookings_url = f"{frontend_url}/account/bookings" if frontend_url else ""
+    orders_url = f"{frontend_url}/account/orders/work" if frontend_url else ""
 
-    notes = _normalize_text(getattr(booking, "customer_notes", ""))
+    notes = _normalize_text(getattr(work_order, "customer_request", ""))
     notes_markup = escape(notes) if notes else "No additional notes"
 
-    subject = f"Booking request received for {product_name}"
+    subject = f"Work order received for {product_name}"
     text_sections = [
-        f"We received your booking request for {product_name}.",
-        f"Session length: {session_minutes} minutes",
-        f"Target delivery window: {delivery_days} days",
-        f"Request id: {booking.id}",
+        f"We received your order request for {product_name}.",
+        f"Delivery mode: {delivery_mode}",
+        f"Work order id: {work_order.id}",
     ]
     if notes:
         text_sections.extend(["", f"Your notes: {notes}"])
-    if bookings_url:
-        text_sections.extend(["", f"Track booking status: {bookings_url}"])
+    if orders_url:
+        text_sections.extend(["", f"Track order status: {orders_url}"])
 
     html_body = f"""
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
-        <h2 style="margin: 0 0 12px;">Booking request received</h2>
+        <h2 style="margin: 0 0 12px;">Work order received</h2>
         <p style="margin: 0 0 8px;">We logged your request for <strong>{escape(product_name)}</strong>.</p>
-        <p style="margin: 0 0 8px;"><strong>Session length:</strong> {session_minutes} minutes</p>
-        <p style="margin: 0 0 8px;"><strong>Target delivery:</strong> {delivery_days} days</p>
-        <p style="margin: 0 0 16px;"><strong>Request id:</strong> {booking.id}</p>
+        <p style="margin: 0 0 8px;"><strong>Delivery mode:</strong> {escape(delivery_mode)}</p>
+        <p style="margin: 0 0 16px;"><strong>Work order id:</strong> {work_order.id}</p>
         <p style="margin: 0 0 16px;"><strong>Your notes:</strong> {notes_markup}</p>
-        {"<p style='margin: 0;'><a href='" + escape(bookings_url) + "'>Open bookings</a></p>" if bookings_url else ""}
+        {"<p style='margin: 0;'><a href='" + escape(orders_url) + "'>Open work orders</a></p>" if orders_url else ""}
       </div>
     """.strip()
 
@@ -267,9 +264,14 @@ def send_booking_requested_email(booking: Booking) -> bool:
         subject=subject,
         html_body=html_body,
         text_body="\n".join(text_sections).strip(),
-        tags={"event": "booking_requested", "source": "django_starter"},
-        idempotency_key=f"booking-requested-{booking.id}",
+        tags={"event": "fulfillment_order_requested", "source": "django_starter"},
+        idempotency_key=f"fulfillment-order-requested-{work_order.id}",
     )
+
+
+def send_booking_requested_email(_booking) -> bool:
+    """Deprecated compatibility wrapper."""
+    return False
 
 
 def send_preflight_test_email(account: CustomerAccount) -> tuple[bool, str]:

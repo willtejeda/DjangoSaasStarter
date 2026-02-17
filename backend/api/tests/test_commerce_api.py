@@ -7,6 +7,7 @@ from api.models import (
     DigitalAsset,
     DownloadGrant,
     Entitlement,
+    FulfillmentOrder,
     Order,
     PaymentTransaction,
     Price,
@@ -14,6 +15,7 @@ from api.models import (
     Profile,
     ServiceOffer,
     Subscription,
+    WebhookEvent,
 )
 from api.webhooks import handle_billing_checkout_upsert, handle_billing_payment_attempt_upsert
 
@@ -173,6 +175,50 @@ class CommerceApiTests(TestCase):
         )
         self.assertEqual(DownloadGrant.objects.filter(customer_account=buyer_account).count(), 1)
 
+    def test_digital_purchase_without_assets_creates_locked_download_object(self):
+        owner = Profile.objects.create(clerk_user_id="seller_digital_no_asset", email="seller-no-asset@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Template Pack Placeholder",
+            slug="template-pack-placeholder",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        price = Price.objects.create(
+            product=product,
+            name="One-time",
+            amount_cents=1900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_no_asset_1"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        grant = DownloadGrant.objects.get(
+            customer_account=buyer_profile.customer_account,
+            order_item__order__public_id=public_id,
+        )
+        self.assertFalse(grant.can_download)
+        self.assertFalse(grant.asset.is_active)
+        self.assertEqual(grant.asset.metadata.get("pending_reason"), "missing_digital_asset")
+
     @patch("api.views_modules.account.send_order_fulfilled_email")
     def test_confirm_order_triggers_order_fulfillment_email(self, mock_send_order_email):
         owner = Profile.objects.create(clerk_user_id="seller_email_1", email="seller-email@example.com")
@@ -210,8 +256,11 @@ class CommerceApiTests(TestCase):
         self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
         mock_send_order_email.assert_called_once()
 
-    @patch("api.views_modules.account.send_booking_requested_email")
-    def test_booking_create_triggers_booking_email(self, mock_send_booking_email):
+    @patch("api.views_modules.account.send_fulfillment_order_requested_email")
+    def test_service_purchase_creates_downloadable_fulfillment_order_and_pending_download(
+        self,
+        mock_send_fulfillment_email,
+    ):
         owner = Profile.objects.create(clerk_user_id="seller_service_1", email="seller-service@example.com")
         service_product = Product.objects.create(
             owner=owner,
@@ -220,22 +269,93 @@ class CommerceApiTests(TestCase):
             visibility=Product.Visibility.PUBLISHED,
             product_type=Product.ProductType.SERVICE,
         )
-        service_offer = ServiceOffer.objects.create(
+        price = Price.objects.create(
+            product=service_product,
+            name="Service",
+            amount_cents=15000,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+        ServiceOffer.objects.create(
             product=service_product,
             session_minutes=45,
             delivery_days=3,
             revision_count=1,
             onboarding_instructions="Share your current revenue funnel before session.",
+            metadata={"delivery_mode": "downloadable"},
         )
 
-        response = self._request(
+        create_response = self._request(
             "post",
-            "/api/account/bookings/",
-            {"service_offer": service_offer.id, "customer_notes": "Need funnel teardown"},
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["status"], "requested")
-        mock_send_booking_email.assert_called_once()
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_service_1"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.data["order"]["status"], Order.Status.FULFILLED)
+
+        fulfillment_order = FulfillmentOrder.objects.get(order_item__order__public_id=public_id)
+        self.assertEqual(fulfillment_order.status, FulfillmentOrder.Status.REQUESTED)
+        self.assertEqual(fulfillment_order.delivery_mode, FulfillmentOrder.DeliveryMode.DOWNLOADABLE)
+        self.assertIsNotNone(fulfillment_order.download_grant_id)
+        self.assertFalse(fulfillment_order.download_grant.can_download)
+        self.assertFalse(fulfillment_order.download_grant.asset.is_active)
+        mock_send_fulfillment_email.assert_called_once()
+
+    def test_service_purchase_with_physical_delivery_creates_work_order_without_download(self):
+        owner = Profile.objects.create(clerk_user_id="seller_service_2", email="seller-service-2@example.com")
+        service_product = Product.objects.create(
+            owner=owner,
+            name="Print and Ship Package",
+            slug="print-and-ship-package",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.SERVICE,
+        )
+        price = Price.objects.create(
+            product=service_product,
+            name="Physical",
+            amount_cents=22000,
+            currency="USD",
+            billing_period=Price.BillingPeriod.ONE_TIME,
+            is_default=True,
+            is_active=True,
+        )
+        ServiceOffer.objects.create(
+            product=service_product,
+            session_minutes=0,
+            delivery_days=5,
+            revision_count=0,
+            onboarding_instructions="Provide shipping address after checkout.",
+            metadata={"delivery_mode": "physical_shipped"},
+        )
+
+        create_response = self._request(
+            "post",
+            "/api/account/orders/create/",
+            {"price_id": price.id, "quantity": 1},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        public_id = create_response.data["order"]["public_id"]
+
+        confirm_response = self._request(
+            "post",
+            f"/api/account/orders/{public_id}/confirm/",
+            {"provider": "manual", "external_id": "txn_service_2"},
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+
+        fulfillment_order = FulfillmentOrder.objects.get(order_item__order__public_id=public_id)
+        self.assertEqual(fulfillment_order.delivery_mode, FulfillmentOrder.DeliveryMode.PHYSICAL_SHIPPED)
+        self.assertIsNone(fulfillment_order.download_grant)
 
     @override_settings(
         ASSET_STORAGE_BACKEND="supabase",
@@ -361,6 +481,67 @@ class CommerceApiTests(TestCase):
         subscription = Subscription.objects.get(clerk_subscription_id="sub_clerk_123")
         self.assertEqual(subscription.status, Subscription.Status.ACTIVE)
         self.assertEqual(subscription.price_id, price.id)
+
+    def test_subscription_list_backfills_from_webhook_history_for_current_user(self):
+        WebhookEvent.objects.create(
+            provider=WebhookEvent.Provider.CLERK,
+            event_id="evt_sub_backfill_1",
+            event_type="subscription.active",
+            status=WebhookEvent.Status.PROCESSED,
+            payload={
+                "type": "subscription.active",
+                "data": {
+                    "id": "sub_backfill_1",
+                    "status": "active",
+                    "payer": {"id": "payer_backfill_1", "user_id": "buyer_123"},
+                },
+            },
+        )
+
+        response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_backfill_1")
+        self.assertEqual(response.data[0]["status"], Subscription.Status.ACTIVE)
+
+    def test_subscription_list_backfill_refreshes_existing_subscription_rows(self):
+        initial_response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(initial_response.status_code, 200)
+
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        existing_subscription = Subscription.objects.create(
+            customer_account=buyer_profile.customer_account,
+            status=Subscription.Status.CANCELED,
+            clerk_subscription_id="sub_backfill_existing_1",
+        )
+
+        WebhookEvent.objects.create(
+            provider=WebhookEvent.Provider.CLERK,
+            event_id="evt_sub_backfill_existing_1",
+            event_type="subscription.active",
+            status=WebhookEvent.Status.PROCESSED,
+            payload={
+                "type": "subscription.active",
+                "data": {
+                    "id": "sub_backfill_existing_1",
+                    "status": "active",
+                    "payer": {"id": "payer_existing_1", "user_id": "buyer_123"},
+                },
+            },
+        )
+
+        refreshed_response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(refreshed_response.status_code, 200)
+
+        existing_subscription.refresh_from_db()
+        self.assertEqual(existing_subscription.status, Subscription.Status.ACTIVE)
+        self.assertTrue(
+            any(
+                row.get("clerk_subscription_id") == "sub_backfill_existing_1"
+                and row.get("status") == Subscription.Status.ACTIVE
+                for row in refreshed_response.data
+            )
+        )
 
     def test_payment_attempt_webhook_fulfills_pending_order(self):
         order = self._create_pending_order()

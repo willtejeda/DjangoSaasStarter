@@ -9,7 +9,6 @@ import type {
   AiProviderRecord,
   AiUsageSummaryResponse,
   BillingFeaturesResponse,
-  BookingRecord,
   DashboardProps,
   DownloadAccessResponse,
   DownloadGrant,
@@ -20,6 +19,7 @@ import type {
   ProductRecord,
   SubscriptionRecord,
   SupabaseProbeResponse,
+  WorkOrderRecord,
 } from '../../../shared/types';
 import {
   buttonGhost,
@@ -91,7 +91,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
   const [downloads, setDownloads] = useState<DownloadGrant[]>([]);
   const [entitlements, setEntitlements] = useState<EntitlementRecord[]>([]);
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<ProductRecord[]>([]);
   const [aiProviders, setAiProviders] = useState<AiProviderRecord[]>([]);
   const [aiUsage, setAiUsage] = useState<AiUsageSummaryResponse>({ period: 'current', plan_tier: 'free', buckets: [], notes: [] });
@@ -171,7 +171,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
         subscriptionsPayload,
         downloadsPayload,
         entitlementsPayload,
-        bookingsPayload,
+        workOrdersPayload,
         catalogPayload,
         aiProvidersPayload,
         aiUsagePayload,
@@ -183,7 +183,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
         authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/'),
         authedRequest<DownloadGrant[]>(getToken, '/account/downloads/'),
         authedRequest<EntitlementRecord[]>(getToken, '/account/entitlements/'),
-        authedRequest<BookingRecord[]>(getToken, '/account/bookings/'),
+        authedRequest<WorkOrderRecord[]>(getToken, '/account/orders/work/'),
         apiRequest<ProductRecord[]>('/products/').catch(() => []),
         authedRequest<AiProviderRecord[]>(getToken, '/ai/providers/').catch(() => []),
         authedRequest<AiUsageSummaryResponse>(getToken, '/ai/usage/summary/').catch(() => ({
@@ -218,7 +218,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
       setSubscriptions(Array.isArray(subscriptionsPayload) ? subscriptionsPayload : []);
       setDownloads(Array.isArray(downloadsPayload) ? downloadsPayload : []);
       setEntitlements(Array.isArray(entitlementsPayload) ? entitlementsPayload : []);
-      setBookings(Array.isArray(bookingsPayload) ? bookingsPayload : []);
+      setWorkOrders(Array.isArray(workOrdersPayload) ? workOrdersPayload : []);
       setCatalogProducts(Array.isArray(catalogPayload) ? catalogPayload : []);
       setAiProviders(Array.isArray(aiProvidersPayload) ? aiProvidersPayload : []);
       setAiUsage(aiUsagePayload || { period: 'current', plan_tier: 'free', buckets: [], notes: [] });
@@ -305,8 +305,8 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
   );
 
   const openServiceRequests = useMemo(
-    () => bookings.filter((booking) => ['requested', 'confirmed'].includes(booking.status)).length,
-    [bookings]
+    () => workOrders.filter((order) => ['requested', 'in_progress', 'ready_for_delivery'].includes(order.status)).length,
+    [workOrders]
   );
 
   const publishedProducts = catalogProducts.length;
@@ -606,7 +606,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
           <MetricCard label="Active Subs" value={String(activeSubscriptions.length)} note={`${subscriptions.length} total subscriptions`} />
           <MetricCard label="Downloads" value={String(readyDownloads)} note={`${downloads.length} total deliveries`} />
           <MetricCard label="Entitlements" value={String(currentEntitlements)} note="Current access records" />
-          <MetricCard label="Service Requests" value={String(openServiceRequests)} note="Bookings in progress" />
+          <MetricCard label="Work Orders" value={String(openServiceRequests)} note="Fulfillment in progress" />
           <MetricCard
             label="AI Providers"
             value={String(configuredAiProviders)}

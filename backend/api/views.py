@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .tools.email.resend import (
-    send_booking_requested_email,
+    send_fulfillment_order_requested_email,
     send_order_fulfilled_email,
     send_preflight_test_email,
 )
@@ -19,6 +19,7 @@ from .views_modules.account import (
     AccountDownloadAccessView,
     AccountDownloadGrantListView,
     AccountEntitlementListView,
+    AccountFulfillmentOrderListView,
     AccountOrderConfirmView,
     AccountOrderCreateView,
     AccountOrderListView,
@@ -59,7 +60,7 @@ __all__ = [
     "get_request_customer_account",
     "confirm_order_payment",
     "send_order_fulfilled_email",
-    "send_booking_requested_email",
+    "send_fulfillment_order_requested_email",
     "send_preflight_test_email",
     "HealthView",
     "MeView",
@@ -82,6 +83,7 @@ __all__ = [
     "AccountEntitlementListView",
     "AccountDownloadGrantListView",
     "AccountDownloadAccessView",
+    "AccountFulfillmentOrderListView",
     "AccountBookingListCreateView",
     "SellerProductListCreateView",
     "SellerProductDetailView",

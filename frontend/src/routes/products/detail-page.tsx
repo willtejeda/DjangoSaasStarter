@@ -96,9 +96,14 @@ export function ProductDetailPage({ slug, signedIn, onNavigate, getToken }: Prod
       }
 
       if (!ENABLE_DEV_MANUAL_CHECKOUT) {
-        throw new Error(
-          'Checkout URL missing for this price. Configure Clerk checkout metadata or use local manual mode only in development.'
-        );
+        setSuccess('Pending order created. Open Purchases to verify status while checkout URL is being configured.');
+        notify({
+          title: 'Pending order created',
+          detail: 'Checkout URL missing. Configure price metadata.checkout_url for Clerk-hosted checkout.',
+          variant: 'info',
+        });
+        onNavigate('/account/purchases');
+        return;
       }
 
       await authedRequest<unknown, { provider: string; external_id: string }>(

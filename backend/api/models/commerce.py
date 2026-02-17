@@ -413,6 +413,103 @@ class DownloadGrant(models.Model):
         return str(self.token)
 
 
+class FulfillmentOrder(models.Model):
+    class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
+        IN_PROGRESS = "in_progress", "In progress"
+        READY_FOR_DELIVERY = "ready_for_delivery", "Ready for delivery"
+        COMPLETED = "completed", "Completed"
+        CANCELED = "canceled", "Canceled"
+
+    class DeliveryMode(models.TextChoices):
+        DOWNLOADABLE = "downloadable", "Downloadable"
+        PHYSICAL_SHIPPED = "physical_shipped", "Physical shipped"
+
+    customer_account = models.ForeignKey(
+        "CustomerAccount",
+        on_delete=models.CASCADE,
+        related_name="fulfillment_orders",
+    )
+    order_item = models.ForeignKey(
+        "OrderItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fulfillment_orders",
+    )
+    product = models.ForeignKey(
+        "Product",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fulfillment_orders",
+    )
+    download_grant = models.OneToOneField(
+        "DownloadGrant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fulfillment_order",
+    )
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.REQUESTED)
+    delivery_mode = models.CharField(
+        max_length=24,
+        choices=DeliveryMode.choices,
+        default=DeliveryMode.DOWNLOADABLE,
+    )
+    customer_request = models.TextField(blank=True)
+    delivery_notes = models.TextField(blank=True)
+    internal_notes = models.TextField(blank=True)
+    due_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    shipped_at = models.DateTimeField(blank=True, null=True)
+    shipping_carrier = models.CharField(max_length=120, blank=True)
+    shipping_tracking_number = models.CharField(max_length=120, blank=True)
+    shipping_tracking_url = models.URLField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("customer_account", "status"), name="fulfill_cust_status_idx"),
+            models.Index(fields=("delivery_mode", "status"), name="fulfill_mode_status_idx"),
+        ]
+
+    def clean(self) -> None:
+        self.customer_request = (self.customer_request or "").strip()
+        self.delivery_notes = (self.delivery_notes or "").strip()
+        self.internal_notes = (self.internal_notes or "").strip()
+        self.shipping_carrier = (self.shipping_carrier or "").strip()
+        self.shipping_tracking_number = (self.shipping_tracking_number or "").strip()
+        self.shipping_tracking_url = (self.shipping_tracking_url or "").strip()
+
+        if self.order_item_id and self.product_id and self.order_item.product_id != self.product_id:
+            raise ValidationError({"product": "Product must match the linked order item product."})
+
+        if self.download_grant_id:
+            if self.delivery_mode != self.DeliveryMode.DOWNLOADABLE:
+                raise ValidationError({"download_grant": "Download grant can only be set for downloadable fulfillment orders."})
+            if self.order_item_id and self.download_grant.order_item_id != self.order_item_id:
+                raise ValidationError({"download_grant": "Download grant must belong to the same order item."})
+
+        if self.delivery_mode == self.DeliveryMode.PHYSICAL_SHIPPED and self.download_grant_id:
+            raise ValidationError({"delivery_mode": "Physical shipment cannot include a download grant."})
+
+        if self.completed_at and self.status not in {self.Status.COMPLETED, self.Status.CANCELED}:
+            raise ValidationError({"completed_at": "completed_at can only be set when status is completed or canceled."})
+
+    def save(self, *args, **kwargs):
+        if self.order_item_id and not self.product_id:
+            self.product = self.order_item.product
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"FulfillmentOrder({self.customer_account_id}, {self.status}, {self.delivery_mode})"
+
+
 class Booking(models.Model):
     class Status(models.TextChoices):
         REQUESTED = "requested", "Requested"

@@ -4,6 +4,7 @@ from .commerce import (
     Booking,
     DownloadGrant,
     Entitlement,
+    FulfillmentOrder,
     Order,
     OrderItem,
     PaymentTransaction,
@@ -25,6 +26,7 @@ __all__ = [
     "Entitlement",
     "DigitalAsset",
     "DownloadGrant",
+    "FulfillmentOrder",
     "ServiceOffer",
     "Booking",
 ]

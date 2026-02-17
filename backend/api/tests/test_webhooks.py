@@ -3,15 +3,17 @@ from unittest.mock import patch
 
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
-from api.models import Profile
+from api.models import CustomerAccount, Price, Product, Profile, Subscription
 from api.webhooks import (
     ClerkWebhookView,
     EVENT_HANDLERS,
     WebhookVerificationError,
     _verify_webhook,
+    handle_billing_subscription_upsert,
     handle_user_created,
     handle_user_deleted,
 )
+from api.webhooks.helpers import _extract_clerk_user_id_from_subscription_payload
 
 
 class ClerkWebhookViewTests(SimpleTestCase):
@@ -134,3 +136,72 @@ class ClerkWebhookHandlerTests(TestCase):
 
         profile = Profile.objects.get(clerk_user_id="user_test_3")
         self.assertEqual(profile.billing_features, ["pro", "ai_coach"])
+
+    def test_extract_subscription_user_id_from_payer_object(self):
+        payload = {
+            "id": "sub_payer_extract_1",
+            "status": "active",
+            "payer": {
+                "id": "pay_123",
+                "user_id": "user_test_4",
+            },
+        }
+        self.assertEqual(_extract_clerk_user_id_from_subscription_payload(payload), "user_test_4")
+
+    def test_handle_billing_subscription_upsert_uses_payer_user_id(self):
+        owner = Profile.objects.create(clerk_user_id="seller_subscription_1", email="seller-sub-1@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Recurring Growth Plan",
+            slug="recurring-growth-plan",
+            product_type=Product.ProductType.DIGITAL,
+            visibility=Product.Visibility.PUBLISHED,
+        )
+        price = Price.objects.create(
+            product=product,
+            name="Monthly",
+            amount_cents=4900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.MONTHLY,
+            clerk_plan_id="plan_growth_123",
+            is_active=True,
+        )
+        Profile.objects.create(clerk_user_id="user_test_4", email="buyer-sub-4@example.com")
+
+        handle_billing_subscription_upsert(
+            {
+                "id": "sub_payer_sync_1",
+                "status": "active",
+                "plan_id": "plan_growth_123",
+                "payer": {
+                    "id": "payer_123",
+                    "user_id": "user_test_4",
+                },
+            }
+        )
+
+        subscription = Subscription.objects.get(clerk_subscription_id="sub_payer_sync_1")
+        self.assertEqual(subscription.customer_account.profile.clerk_user_id, "user_test_4")
+        self.assertEqual(subscription.status, Subscription.Status.ACTIVE)
+        self.assertEqual(subscription.price_id, price.id)
+        self.assertEqual(subscription.product_id, product.id)
+
+    def test_handle_billing_subscription_upsert_creates_account_for_missing_profile(self):
+        self.assertFalse(Profile.objects.filter(clerk_user_id="user_test_5").exists())
+
+        handle_billing_subscription_upsert(
+            {
+                "id": "sub_payer_sync_2",
+                "status": "active",
+                "payer": {
+                    "id": "payer_456",
+                    "user_id": "user_test_5",
+                },
+            }
+        )
+
+        profile = Profile.objects.get(clerk_user_id="user_test_5")
+        account = CustomerAccount.objects.get(profile=profile)
+        subscription = Subscription.objects.get(clerk_subscription_id="sub_payer_sync_2")
+        self.assertEqual(subscription.customer_account_id, account.id)
+        self.assertEqual(subscription.status, Subscription.Status.ACTIVE)

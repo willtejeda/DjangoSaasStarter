@@ -9,6 +9,7 @@ from .views import (
     AccountDownloadAccessView,
     AccountDownloadGrantListView,
     AccountEntitlementListView,
+    AccountFulfillmentOrderListView,
     AccountOrderConfirmView,
     AccountOrderCreateView,
     AccountOrderListView,
@@ -61,6 +62,7 @@ urlpatterns = [
     path("account/subscriptions/", AccountSubscriptionListView.as_view(), name="account-subscription-list"),
     path("account/entitlements/", AccountEntitlementListView.as_view(), name="account-entitlement-list"),
     path("account/downloads/", AccountDownloadGrantListView.as_view(), name="account-download-list"),
+    path("account/orders/work/", AccountFulfillmentOrderListView.as_view(), name="account-work-order-list"),
     path(
         "account/downloads/<uuid:token>/access/",
         AccountDownloadAccessView.as_view(),

@@ -14,6 +14,7 @@ from .commerce import (
     CustomerAccountSerializer,
     DownloadGrantSerializer,
     EntitlementSerializer,
+    FulfillmentOrderSerializer,
     LightweightProfileSerializer,
     OrderConfirmSerializer,
     OrderCreateSerializer,
@@ -44,5 +45,6 @@ __all__ = [
     "SubscriptionSerializer",
     "EntitlementSerializer",
     "DownloadGrantSerializer",
+    "FulfillmentOrderSerializer",
     "BookingSerializer",
 ]

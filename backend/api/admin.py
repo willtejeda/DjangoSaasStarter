@@ -6,6 +6,7 @@ from .models import (
     DigitalAsset,
     DownloadGrant,
     Entitlement,
+    FulfillmentOrder,
     Order,
     OrderItem,
     PaymentTransaction,
@@ -125,6 +126,13 @@ class DownloadGrantAdmin(admin.ModelAdmin):
 class ServiceOfferAdmin(admin.ModelAdmin):
     list_display = ("product", "session_minutes", "delivery_days", "revision_count", "updated_at")
     search_fields = ("product__name",)
+
+
+@admin.register(FulfillmentOrder)
+class FulfillmentOrderAdmin(admin.ModelAdmin):
+    list_display = ("customer_account", "product", "status", "delivery_mode", "due_at", "updated_at")
+    search_fields = ("customer_account__billing_email", "product__name", "shipping_tracking_number")
+    list_filter = ("status", "delivery_mode")
 
 
 @admin.register(Booking)

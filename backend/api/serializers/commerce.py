@@ -7,6 +7,7 @@ from ..models import (
     CustomerAccount,
     DownloadGrant,
     Entitlement,
+    FulfillmentOrder,
     Order,
     OrderItem,
     Profile,
@@ -234,3 +235,60 @@ class BookingSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class FulfillmentOrderSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    download_token = serializers.UUIDField(source="download_grant.token", read_only=True)
+    download_ready = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FulfillmentOrder
+        fields = (
+            "id",
+            "order_item",
+            "product",
+            "product_name",
+            "status",
+            "delivery_mode",
+            "customer_request",
+            "delivery_notes",
+            "due_at",
+            "completed_at",
+            "shipped_at",
+            "shipping_carrier",
+            "shipping_tracking_number",
+            "shipping_tracking_url",
+            "download_grant",
+            "download_token",
+            "download_ready",
+            "metadata",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "order_item",
+            "product",
+            "product_name",
+            "status",
+            "delivery_mode",
+            "delivery_notes",
+            "due_at",
+            "completed_at",
+            "shipped_at",
+            "shipping_carrier",
+            "shipping_tracking_number",
+            "shipping_tracking_url",
+            "download_grant",
+            "download_token",
+            "download_ready",
+            "metadata",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_download_ready(self, obj: FulfillmentOrder) -> bool:
+        if not obj.download_grant_id:
+            return False
+        return bool(obj.download_grant.can_download)

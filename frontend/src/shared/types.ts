@@ -8,8 +8,12 @@ export type PlanTier = 'free' | 'pro' | 'enterprise';
 export type GetTokenFn = ReturnType<typeof useAuth>['getToken'];
 
 export interface ActivePrice {
+  id: Id;
+  name?: string | null;
   amount_cents: number;
   currency: string;
+  billing_period?: string;
+  is_default?: boolean;
 }
 
 export interface ProductPrice {
@@ -87,11 +91,21 @@ export interface DownloadAccessResponse {
   download_url?: string | null;
 }
 
-export interface BookingRecord {
+export interface WorkOrderRecord {
   id: Id;
   product_name?: string | null;
   status: string;
-  customer_notes?: string | null;
+  delivery_mode: string;
+  customer_request?: string | null;
+  delivery_notes?: string | null;
+  due_at?: string | null;
+  completed_at?: string | null;
+  shipped_at?: string | null;
+  shipping_carrier?: string | null;
+  shipping_tracking_number?: string | null;
+  shipping_tracking_url?: string | null;
+  download_token?: string | null;
+  download_ready?: boolean;
 }
 
 export interface EntitlementRecord {
@@ -156,9 +170,7 @@ export interface PricingPageProps {
   signedIn: boolean;
 }
 
-export interface ProductCatalogProps {
-  onNavigate: NavigateFn;
-}
+export interface ProductCatalogProps extends TokenNavigateProps {}
 
 export interface ProductDetailProps {
   slug: string;

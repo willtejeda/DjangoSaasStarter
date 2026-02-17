@@ -106,15 +106,64 @@ def _extract_clerk_user_id_from_subscription_payload(data: dict[str, Any]) -> st
         data.get("subscriber_id"),
         data.get("customer_id"),
         data.get("payer_id"),
+        data.get("clerk_user_id"),
     ]
 
     subscriber = data.get("subscriber")
     if isinstance(subscriber, dict):
-        candidates.extend([subscriber.get("id"), subscriber.get("user_id")])
+        candidates.extend(
+            [
+                subscriber.get("id"),
+                subscriber.get("user_id"),
+                subscriber.get("clerk_user_id"),
+            ]
+        )
 
     user = data.get("user")
     if isinstance(user, dict):
         candidates.extend([user.get("id"), user.get("user_id")])
+
+    payer = data.get("payer")
+    if isinstance(payer, dict):
+        candidates.extend(
+            [
+                payer.get("user_id"),
+                payer.get("clerk_user_id"),
+                payer.get("subscriber_id"),
+                payer.get("customer_id"),
+                payer.get("id"),
+            ]
+        )
+        payer_user = payer.get("user")
+        if isinstance(payer_user, dict):
+            candidates.extend(
+                [
+                    payer_user.get("id"),
+                    payer_user.get("user_id"),
+                ]
+            )
+
+    nested_id = _extract_first_value(
+        data,
+        [
+            "clerk_user_id",
+            "clerkUserId",
+            "user_id",
+            "userId",
+            "subscriber_id",
+            "subscriberId",
+            "customer_id",
+            "customerId",
+        ],
+    )
+    if nested_id:
+        candidates.append(nested_id)
+
+    # Guard against non-user payer identifiers. Clerk user ids use the user_ prefix.
+    for value in candidates:
+        normalized = str(value or "").strip()
+        if normalized.startswith("user_"):
+            return normalized
 
     for value in candidates:
         normalized = str(value or "").strip()
@@ -124,12 +173,25 @@ def _extract_clerk_user_id_from_subscription_payload(data: dict[str, Any]) -> st
 
 
 def _resolve_customer_account_from_clerk_user_id(clerk_user_id: str) -> CustomerAccount | None:
-    if not clerk_user_id:
+    normalized = str(clerk_user_id or "").strip()
+    if not normalized:
         return None
 
-    profile = Profile.objects.filter(clerk_user_id=clerk_user_id).first()
-    if profile is None:
+    account = (
+        CustomerAccount.objects.select_related("profile")
+        .filter(Q(profile__clerk_user_id=normalized) | Q(external_customer_id=normalized))
+        .first()
+    )
+    if account is not None:
+        return account
+
+    if not normalized.startswith("user_"):
         return None
+
+    profile, _ = Profile.objects.get_or_create(
+        clerk_user_id=normalized,
+        defaults={"is_active": True},
+    )
 
     account, _ = CustomerAccount.objects.get_or_create(
         profile=profile,

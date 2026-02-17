@@ -16,9 +16,9 @@ Update these first in `./frontend/src/routes/landing/page.tsx`.
 
 ### Safe to remove if unused
 
-- Service booking flow:
-  - `/api/account/bookings/`
-  - `Booking` and `ServiceOffer` related UI routes
+- Service work-order flow:
+  - `/api/account/orders/work/` (`/api/account/bookings/` legacy alias)
+  - `FulfillmentOrder` and `ServiceOffer` related UI routes
 - Digital asset flow:
   - download grant pages and storage integration
 - AI usage scaffolding:

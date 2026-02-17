@@ -31,7 +31,7 @@ export function ExamplesRoutePage({ onNavigate }: ExamplesRoutePageProps): React
 
       <SignalSandboxExample />
 
-      <FrontendBackendExamples />
+      <FrontendBackendExamples onNavigate={onNavigate} />
 
       <article className={cardClass}>
         <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Email template scaffold</h2>

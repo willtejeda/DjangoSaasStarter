@@ -11,8 +11,8 @@ import { ProductCatalogPage, ProductDetailPage } from './products';
 import { CheckoutStatePage } from './checkout';
 import { AccountDashboard } from './app/dashboard';
 import {
-  AccountBookingsPage,
   AccountDownloadsPage,
+  AccountWorkOrdersPage,
   AccountPurchasesPage,
   AccountSubscriptionsPage,
 } from './app/account';
@@ -27,7 +27,7 @@ function AppFrame({
 }: SignedAppProps & { signedIn: boolean; content: ReactNode }): ReactElement {
   return (
     <main className="w-full pb-20 lg:pb-24">
-      <div className="lg:grid lg:min-h-screen lg:grid-cols-[280px,minmax(0,1fr)]">
+      <div className="lg:grid lg:min-h-screen lg:grid-cols-[304px,minmax(0,1fr)]">
         <PrimaryNavigation
           pathname={pathname}
           onNavigate={onNavigate}
@@ -84,7 +84,7 @@ export function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }:
   if (pathname === '/pricing') {
     content = <PricingPage signedIn />;
   } else if (pathname === '/products') {
-    content = <ProductCatalogPage onNavigate={onNavigate} />;
+    content = <ProductCatalogPage onNavigate={onNavigate} getToken={getToken} />;
   } else if (pathname === '/examples') {
     content = <ExamplesRoutePage onNavigate={onNavigate} />;
   } else if (isProductDetail && productSlug) {
@@ -95,8 +95,8 @@ export function SignedInApp({ pathname, onNavigate, themeLabel, onToggleTheme }:
     content = <AccountSubscriptionsPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/account/downloads') {
     content = <AccountDownloadsPage getToken={getToken} onNavigate={onNavigate} />;
-  } else if (pathname === '/account/bookings') {
-    content = <AccountBookingsPage getToken={getToken} onNavigate={onNavigate} />;
+  } else if (pathname === '/account/orders/work' || pathname === '/account/bookings') {
+    content = <AccountWorkOrdersPage getToken={getToken} onNavigate={onNavigate} />;
   } else if (pathname === '/checkout/success') {
     content = <CheckoutStatePage state="success" onNavigate={onNavigate} />;
   } else if (pathname === '/checkout/cancel') {

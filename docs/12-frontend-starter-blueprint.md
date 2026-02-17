@@ -22,7 +22,8 @@ If a file is reused across multiple routes, keep it in `components`.
 - `/account/purchases` -> `./frontend/src/routes/app/account/purchases-page.tsx`
 - `/account/subscriptions` -> `./frontend/src/routes/app/account/subscriptions-page.tsx`
 - `/account/downloads` -> `./frontend/src/routes/app/account/downloads-page.tsx`
-- `/account/bookings` -> `./frontend/src/routes/app/account/bookings-page.tsx`
+- `/account/orders/work` -> `./frontend/src/routes/app/account/bookings-page.tsx`
+- `/account/bookings` (legacy alias) -> `./frontend/src/routes/app/account/bookings-page.tsx`
 - `/examples` -> `./frontend/src/routes/examples/page.tsx`
 
 Main route matcher:
@@ -71,7 +72,7 @@ These are good defaults for most SaaS projects:
 - Purchases page
 - Subscriptions page
 - Downloads page
-- Bookings page
+- Work Orders page
 
 4. Operator dashboard blocks
 - Preflight integration checklist

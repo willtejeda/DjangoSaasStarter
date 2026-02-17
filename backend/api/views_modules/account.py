@@ -23,35 +23,57 @@ from ..tools.storage.block_storage import (
 )
 from ..tools.email.resend import (
     resend_is_configured,
-    send_booking_requested_email,
+    send_fulfillment_order_requested_email,
     send_order_fulfilled_email,
     send_preflight_test_email,
 )
 from ..models import (
-    Booking,
+    DigitalAsset,
     DownloadGrant,
     Entitlement,
+    FulfillmentOrder,
     Order,
     OrderItem,
     PaymentTransaction,
     Price,
     Product,
-    ServiceOffer,
     Subscription,
+    WebhookEvent,
 )
 from ..serializers import (
-    BookingSerializer,
     CustomerAccountSerializer,
     DownloadGrantSerializer,
     EntitlementSerializer,
+    FulfillmentOrderSerializer,
     OrderConfirmSerializer,
     OrderCreateSerializer,
     OrderSerializer,
     SubscriptionSerializer,
 )
+from ..webhooks.handlers import handle_billing_subscription_canceled, handle_billing_subscription_upsert
+from ..webhooks.helpers import _extract_clerk_user_id_from_subscription_payload
 from .helpers import _safe_dict, _safe_str, get_request_customer_account
 
 logger = logging.getLogger(__name__)
+SUBSCRIPTION_UPSERT_EVENT_TYPES = {
+    "subscription.created",
+    "subscription.updated",
+    "subscription.active",
+    "subscription.pastDue",
+    "subscription.paused",
+    "billing.subscription.created",
+    "billing.subscription.updated",
+    "billing.subscription.active",
+    "billing.subscription.pastDue",
+    "billing.subscription.paused",
+}
+SUBSCRIPTION_CANCELED_EVENT_TYPES = {
+    "subscription.canceled",
+    "subscription.cancelled",
+    "billing.subscription.canceled",
+    "billing.subscription.cancelled",
+}
+SUBSCRIPTION_BACKFILL_EVENT_LIMIT = 200
 
 
 def _billing_period_end(start_at, billing_period: str):
@@ -60,6 +82,51 @@ def _billing_period_end(start_at, billing_period: str):
     if billing_period == Price.BillingPeriod.YEARLY:
         return start_at + timedelta(days=365)
     return None
+
+
+def _resolve_service_delivery_mode(item: OrderItem) -> str:
+    service_offer = getattr(item.product, "service_offer", None)
+    metadata = service_offer.metadata if service_offer and isinstance(service_offer.metadata, dict) else {}
+    raw_value = str(
+        metadata.get("delivery_mode")
+        or metadata.get("fulfillment_delivery_mode")
+        or ""
+    ).strip().lower()
+    if raw_value in {"physical", "shipped", FulfillmentOrder.DeliveryMode.PHYSICAL_SHIPPED}:
+        return FulfillmentOrder.DeliveryMode.PHYSICAL_SHIPPED
+    return FulfillmentOrder.DeliveryMode.DOWNLOADABLE
+
+
+def _create_pending_download_grant(
+    order: Order,
+    item: OrderItem,
+    sequence: int,
+    *,
+    reason: str = "pending_fulfillment",
+) -> DownloadGrant:
+    safe_order_id = str(order.public_id)
+    safe_product_name = (item.product_name_snapshot or item.product.name or "Custom deliverable").strip()
+    asset = DigitalAsset.objects.create(
+        product=item.product,
+        title=f"{safe_product_name} deliverable #{sequence}",
+        file_path=f"pending/fulfillment/{safe_order_id}/{item.id}-{sequence}.pending",
+        version_label="pending",
+        is_active=False,
+        metadata={
+            "pending_fulfillment": True,
+            "pending_reason": reason,
+            "order_public_id": safe_order_id,
+            "order_item_id": item.id,
+            "sequence": sequence,
+        },
+    )
+    return DownloadGrant.objects.create(
+        customer_account=order.customer_account,
+        order_item=item,
+        asset=asset,
+        max_downloads=5,
+        is_active=False,
+    )
 
 
 def _fulfill_order(order: Order) -> Order:
@@ -91,24 +158,64 @@ def _fulfill_order(order: Order) -> Order:
             )
 
         if product.product_type == Product.ProductType.DIGITAL:
-            for asset in product.assets.filter(is_active=True):
+            active_assets = list(product.assets.filter(is_active=True))
+            for asset in active_assets:
                 DownloadGrant.objects.get_or_create(
                     customer_account=order.customer_account,
                     order_item=item,
                     asset=asset,
                     defaults={"max_downloads": 5, "is_active": True},
                 )
-
-        if product.product_type == Product.ProductType.SERVICE and hasattr(product, "service_offer"):
-            existing_count = Booking.objects.filter(order_item=item).count()
-            needed = max((item.quantity or 1) - existing_count, 0)
-            for _ in range(needed):
-                Booking.objects.create(
+            if not active_assets:
+                existing_pending = DownloadGrant.objects.filter(
                     customer_account=order.customer_account,
-                    service_offer=product.service_offer,
                     order_item=item,
-                    status=Booking.Status.REQUESTED,
+                    asset__metadata__pending_fulfillment=True,
+                ).count()
+                needed = max((item.quantity or 1) - existing_pending, 0)
+                for offset in range(needed):
+                    sequence = existing_pending + offset + 1
+                    _create_pending_download_grant(
+                        order,
+                        item,
+                        sequence,
+                        reason="missing_digital_asset",
+                    )
+
+        if product.product_type == Product.ProductType.SERVICE:
+            existing_count = FulfillmentOrder.objects.filter(order_item=item).count()
+            needed = max((item.quantity or 1) - existing_count, 0)
+            delivery_mode = _resolve_service_delivery_mode(item)
+            service_offer = getattr(product, "service_offer", None)
+            delivery_days = int(getattr(service_offer, "delivery_days", 0) or 0)
+            due_at = now + timedelta(days=delivery_days) if delivery_days > 0 else None
+            for offset in range(needed):
+                sequence = existing_count + offset + 1
+                download_grant = None
+                if delivery_mode == FulfillmentOrder.DeliveryMode.DOWNLOADABLE:
+                    download_grant = _create_pending_download_grant(
+                        order,
+                        item,
+                        sequence,
+                        reason="service_fulfillment",
+                    )
+
+                fulfillment_order = FulfillmentOrder.objects.create(
+                    customer_account=order.customer_account,
+                    order_item=item,
+                    product=product,
+                    status=FulfillmentOrder.Status.REQUESTED,
+                    delivery_mode=delivery_mode,
+                    customer_request=order.notes,
+                    due_at=due_at,
+                    download_grant=download_grant,
+                    metadata={
+                        "order_public_id": str(order.public_id),
+                        "order_item_id": item.id,
+                        "sequence": sequence,
+                    },
                 )
+                send_fulfillment_order_requested_email(fulfillment_order)
 
     order.status = Order.Status.FULFILLED
     order.fulfilled_at = order.fulfilled_at or now
@@ -230,6 +337,77 @@ def confirm_order_payment(
 
     order = _fulfill_order(order)
     return order, False
+
+
+def _backfill_subscriptions_from_webhook_history(account) -> None:
+    event_types = [*SUBSCRIPTION_UPSERT_EVENT_TYPES, *SUBSCRIPTION_CANCELED_EVENT_TYPES]
+    recent_events = list(
+        WebhookEvent.objects.filter(
+            provider=WebhookEvent.Provider.CLERK,
+            event_type__in=event_types,
+        )
+        .order_by("-received_at")[:SUBSCRIPTION_BACKFILL_EVENT_LIMIT]
+    )
+    if not recent_events:
+        return
+
+    allowed_customer_ids = {
+        str(account.profile.clerk_user_id or "").strip(),
+        str(account.external_customer_id or "").strip(),
+    }
+    allowed_customer_emails = {
+        str(account.billing_email or "").strip().lower(),
+        str(account.profile.email or "").strip().lower(),
+    }
+
+    def _add_value(values: set[str], raw: object, *, lower: bool = False) -> None:
+        normalized = str(raw or "").strip()
+        if lower:
+            normalized = normalized.lower()
+        if normalized:
+            values.add(normalized)
+
+    def _payload_matches_account(data: dict[str, Any]) -> bool:
+        candidate_ids: set[str] = set()
+        candidate_emails: set[str] = set()
+
+        def collect(payload_part: dict[str, Any]) -> None:
+            for field in ("id", "user_id", "clerk_user_id", "customer_id", "subscriber_id", "payer_id"):
+                _add_value(candidate_ids, payload_part.get(field))
+            for field in ("email", "email_address", "billing_email"):
+                _add_value(candidate_emails, payload_part.get(field), lower=True)
+
+            nested_user = payload_part.get("user")
+            if isinstance(nested_user, dict):
+                collect(nested_user)
+
+        collect(data)
+
+        for nested_field in ("payer", "subscriber", "customer"):
+            nested = data.get(nested_field)
+            if isinstance(nested, dict):
+                collect(nested)
+
+        _add_value(candidate_ids, _extract_clerk_user_id_from_subscription_payload(data))
+
+        return bool(
+            (candidate_ids & allowed_customer_ids)
+            or (candidate_emails & allowed_customer_emails)
+        )
+
+    for event in reversed(recent_events):
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        if not isinstance(data, dict):
+            continue
+
+        if not _payload_matches_account(data):
+            continue
+
+        if event.event_type in SUBSCRIPTION_CANCELED_EVENT_TYPES:
+            handle_billing_subscription_canceled(data)
+        else:
+            handle_billing_subscription_upsert(data)
 
 
 class AccountCustomerView(APIView):
@@ -453,6 +631,7 @@ class AccountSubscriptionListView(generics.ListAPIView):
 
     def get_queryset(self):
         account = get_request_customer_account(self.request)
+        _backfill_subscriptions_from_webhook_history(account)
         return Subscription.objects.filter(customer_account=account).select_related("product", "price")
 
 
@@ -535,57 +714,21 @@ class AccountDownloadAccessView(APIView):
         )
 
 
-class AccountBookingListCreateView(generics.ListCreateAPIView):
+class AccountFulfillmentOrderListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = BookingSerializer
+    serializer_class = FulfillmentOrderSerializer
 
     def get_queryset(self):
         account = get_request_customer_account(self.request)
         return (
-            Booking.objects.filter(customer_account=account)
-            .select_related("service_offer", "service_offer__product", "order_item")
+            FulfillmentOrder.objects.filter(customer_account=account)
+            .select_related("product", "order_item", "download_grant", "download_grant__asset")
             .order_by("-created_at")
         )
 
-    def create(self, request, *args, **kwargs):
-        account = get_request_customer_account(request)
-        service_offer_id = request.data.get("service_offer")
-        order_item_id = request.data.get("order_item")
-        customer_notes = _safe_str(request.data.get("customer_notes"))
 
-        if not service_offer_id:
-            raise ValidationError({"service_offer": "service_offer is required."})
-
-        service_offer = get_object_or_404(
-            ServiceOffer.objects.select_related("product"),
-            pk=service_offer_id,
-            product__visibility=Product.Visibility.PUBLISHED,
-        )
-
-        order_item = None
-        if order_item_id:
-            order_item = get_object_or_404(
-                OrderItem.objects.select_related("order", "product"),
-                pk=order_item_id,
-                order__customer_account=account,
-            )
-            if order_item.product_id != service_offer.product_id:
-                raise ValidationError({"order_item": "Order item must match selected service offer."})
-
-        booking = Booking.objects.create(
-            customer_account=account,
-            service_offer=service_offer,
-            order_item=order_item,
-            status=Booking.Status.REQUESTED,
-            customer_notes=customer_notes,
-        )
-        # Best-effort transactional email. Booking creation remains source-of-truth.
-        send_booking_requested_email(booking)
-        logger.info(
-            "Created booking %s for account %s (service_offer=%s, order_item=%s).",
-            booking.id,
-            account.id,
-            service_offer.id,
-            order_item.id if order_item else None,
-        )
-        return Response(BookingSerializer(booking).data, status=201)
+class AccountBookingListCreateView(AccountFulfillmentOrderListView):
+    """
+    Deprecated endpoint alias.
+    Keep GET compatibility for existing clients on /account/bookings/.
+    """

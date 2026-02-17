@@ -59,7 +59,7 @@ function navLinksFor(signedIn: boolean): Array<{ label: string; to: string }> {
     { label: 'Purchases', to: '/account/purchases' },
     { label: 'Downloads', to: '/account/downloads' },
     { label: 'Subscriptions', to: '/account/subscriptions' },
-    { label: 'Bookings', to: '/account/bookings' },
+    { label: 'Work Orders', to: '/account/orders/work' },
     { label: 'Examples', to: '/examples' },
   ];
 
@@ -99,10 +99,10 @@ function NavigationPanel({
   };
 
   return (
-    <aside className="h-full rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/85">
+    <aside className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/85">
       <button
         type="button"
-        className="flex items-center gap-3 text-left"
+        className="flex w-full items-center gap-3 text-left"
         onClick={() => navigateAndClose(signedIn ? '/app' : '/')}
       >
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-950 text-sm font-bold text-white dark:bg-cyan-400 dark:text-slate-950">
@@ -110,44 +110,48 @@ function NavigationPanel({
         </span>
         <span>
           <span className="block text-base font-bold text-slate-900 dark:text-slate-100">DjangoStarter</span>
-          <span className="block text-xs uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+          <span className="mt-0.5 block text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
             Cashflow-first SaaS starter
           </span>
         </span>
       </button>
 
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Navigation</p>
-      <nav className="mt-3 grid gap-2">
-        {links.map((link) => {
-          const active = pathname === link.to;
-          return (
-            <a
-              key={link.to}
-              href={link.to}
-              className={cn(
-                'rounded-xl px-3 py-2 text-sm font-semibold transition',
-                active
-                  ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              )}
-              onClick={(event) => {
-                event.preventDefault();
-                navigateAndClose(link.to);
-              }}
-            >
-              {link.label}
-            </a>
-          );
-        })}
-      </nav>
-      <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+      <div className="mt-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Navigation</p>
+        <nav className="mt-3 grid gap-1.5" aria-label="Primary">
+          {links.map((link) => {
+            const active = pathname === link.to;
+            return (
+              <a
+                key={link.to}
+                href={link.to}
+                className={cn(
+                  'rounded-xl px-3 py-2.5 text-sm font-semibold transition',
+                  active
+                    ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
+                    : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                )}
+                aria-current={active ? 'page' : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateAndClose(link.to);
+                }}
+              >
+                {link.label}
+              </a>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Mission</p>
         <p className="mt-1 text-xs leading-relaxed text-emerald-800 dark:text-emerald-200">
           Ship one paid loop first. Then optimize retention and traffic.
         </p>
       </div>
 
-      <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-700">
+      <div className="mt-auto border-t border-slate-200 pt-4 dark:border-slate-700">
         <button type="button" className={cn(buttonGhost, 'w-full justify-center')} onClick={onToggleTheme}>
           {themeLabel}
         </button>

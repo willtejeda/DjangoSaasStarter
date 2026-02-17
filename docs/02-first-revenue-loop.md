@@ -9,7 +9,7 @@ A buyer can:
 1. Visit offer page
 2. Start checkout
 3. Pay through Clerk
-4. Receive fulfillment (download, subscription access, or booking)
+4. Receive fulfillment (download, subscription access, or work order)
 5. See records in account pages
 
 ## Phase A: Do this before starting feature work
@@ -82,13 +82,13 @@ Subscription flow:
 
 Service flow:
 
-1. Paid order creates booking records
-2. `/account/bookings` shows request
+1. Paid order creates work order records
+2. `/account/orders/work` shows request state
 
 ## Phase F: Verify email touchpoints
 
 1. Send preflight email from `/app`
-2. Trigger order fulfillment and booking messages
+2. Trigger order fulfillment and work order messages
 3. Confirm recipients and sender domain are valid
 
 ## Guardrails

@@ -67,7 +67,7 @@ Change made:
 
 - Added logging config in `./backend/project_settings/settings.py`.
 - Added `DJANGO_LOG_LEVEL` and `API_LOG_LEVEL` in `./backend/.env.example`.
-- Added structured logs for order creation, order confirmation, preflight email sends, download link generation, and booking creation.
+- Added structured logs for order creation, order confirmation, preflight email sends, download link generation, and work order creation.
 
 Impact:
 

@@ -23,8 +23,8 @@ Base URL: `http://127.0.0.1:8000/api`
 - `GET /account/entitlements/`
 - `GET /account/downloads/`
 - `POST /account/downloads/:token/access/`
-- `GET /account/bookings/`
-- `POST /account/bookings/`
+- `GET /account/orders/work/`
+- `GET /account/bookings/` (legacy alias for `/account/orders/work/`)
 
 ## Seller endpoints
 
