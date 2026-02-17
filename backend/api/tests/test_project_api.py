@@ -157,7 +157,7 @@ class ProjectApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["ok"])
         self.assertEqual(response.data["profile"]["clerk_user_id"], "user_123")
-        mock_get_supabase_client.assert_called_once_with(access_token="unit-test-token")
+        mock_get_supabase_client.assert_called_once_with()
 
     def test_preflight_email_test_requires_resend_config(self):
         response = self._request("post", "/api/account/preflight/email-test/")

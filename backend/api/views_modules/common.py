@@ -193,7 +193,10 @@ class SupabaseProfileView(APIView):
 
         try:
             logger.debug("Running Supabase profile probe for user %s.", clerk_user_id)
-            supabase = get_supabase_client(access_token=getattr(request, "clerk_token", None))
+            # Use anon-key probe mode by default. Forwarding Clerk JWTs to
+            # PostgREST can fail unless Supabase JWT verification is configured
+            # for that issuer.
+            supabase = get_supabase_client()
             result = (
                 supabase.table("profiles")
                 .select("*")
@@ -211,7 +214,14 @@ class SupabaseProfileView(APIView):
                 }
             )
         except Exception as exc:  # pragma: no cover
-            logger.exception("Unexpected error during Supabase profile probe for user %s.", clerk_user_id)
+            error_text = str(exc)
+            if "PGRST301" in error_text or "wrong key type" in error_text.lower():
+                logger.warning(
+                    "Supabase probe auth rejected for user %s. Check SUPABASE_ANON_KEY and PostgREST auth settings.",
+                    clerk_user_id,
+                )
+            else:
+                logger.exception("Unexpected error during Supabase profile probe for user %s.", clerk_user_id)
             return Response(
                 {
                     "ok": False,
