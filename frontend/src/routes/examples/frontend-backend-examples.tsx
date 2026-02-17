@@ -170,12 +170,22 @@ const emailTest = await authedRequest(
     stage: 'Retention',
     title: 'Read AI provider and usage scaffolding',
     route: '/app',
-    note: 'Use provider readiness and usage buckets to gate subscription-based AI features.',
+    note: 'Use provider readiness, enforced usage buckets, and simulator endpoints to gate subscription AI features.',
     language: 'ts',
     code: `const [providers, usage] = await Promise.all([
   authedRequest(getToken, '/ai/providers/'),
   authedRequest(getToken, '/ai/usage/summary/'),
-]);`,
+]);
+
+const estimate = await authedRequest(getToken, '/ai/tokens/estimate/', {
+  method: 'POST',
+  body: { messages: [{ role: 'user', content: 'Draft an onboarding email.' }] },
+});
+
+const debugRun = await authedRequest(getToken, '/ai/chat/complete/', {
+  method: 'POST',
+  body: { provider: 'simulator', messages: [{ role: 'user', content: 'Run quota test.' }] },
+});`,
   },
   {
     id: 'pricing',

@@ -1,4 +1,5 @@
 from .accounts import CustomerAccount, Profile, Project
+from .ai import AiUsageEvent
 from .catalog import DigitalAsset, Price, Product, ServiceOffer
 from .commerce import (
     Booking,
@@ -16,6 +17,7 @@ __all__ = [
     "Profile",
     "Project",
     "CustomerAccount",
+    "AiUsageEvent",
     "Product",
     "Price",
     "Order",

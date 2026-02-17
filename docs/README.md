@@ -29,6 +29,7 @@ This is the working wiki for builders, operators, and AI agents.
 - Monetization first
 - Integration proof before feature depth
 - Server-side payment truth
+- Clerk billing source of truth with explicit sync controls
 - Schema ownership clarity
 - Modular code that users can delete safely
 

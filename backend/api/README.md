@@ -4,6 +4,7 @@
 
 - `./backend/api/models/`
   - `accounts.py`
+  - `ai.py`
   - `catalog.py`
   - `commerce.py`
 - `./backend/api/serializers/`
@@ -21,6 +22,7 @@
   - `handlers.py`
   - `receiver.py`
 - `./backend/api/tools/`
+  - `ai/`
   - `auth/`
   - `billing/`
   - `database/`
@@ -34,6 +36,8 @@
 2. Clerk webhooks confirm payments in production.
 3. Fulfillment runs server-side only.
 4. Tools are integration adapters and should stay swappable.
+5. `/api/account/subscriptions/` is read-only local projection and does not trigger Clerk sync.
+6. `/api/account/subscriptions/status/` is read-only unless `?refresh=1` is supplied.
 
 ## Logging and safety
 

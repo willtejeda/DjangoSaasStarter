@@ -60,7 +60,7 @@ export function LandingPage(): ReactElement {
     },
     {
       title: 'Subscription + usage',
-      outcome: 'Ship AI chat, image, or video usage limits with monthly resets.',
+      outcome: 'Ship AI chat, image, or video usage limits with billing-cycle resets.',
       steps: ['Recurring plan', 'Entitlement keys', 'Token and generation quotas'],
     },
     {

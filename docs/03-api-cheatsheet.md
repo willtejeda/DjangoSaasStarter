@@ -13,13 +13,18 @@ Base URL: `http://127.0.0.1:8000/api`
 - `GET /me/`
 - `GET /billing/features/`
 - `GET /ai/providers/`
+- `POST /ai/tokens/estimate/`
+- `POST /ai/chat/complete/`
+- `POST /ai/images/generate/`
 - `GET /ai/usage/summary/`
 - `GET /supabase/profile/`
 - `POST /account/preflight/email-test/`
 - `GET /account/orders/`
 - `POST /account/orders/create/`
 - `POST /account/orders/:public_id/confirm/` (dev flags only)
-- `GET /account/subscriptions/`
+- `GET /account/subscriptions/` (read-only local projection; no Clerk sync side effects)
+- `GET /account/subscriptions/status/` (read-only cached status)
+- `GET /account/subscriptions/status/?refresh=1` (forces a Clerk re-sync attempt)
 - `GET /account/entitlements/`
 - `GET /account/downloads/`
 - `POST /account/downloads/:token/access/`
@@ -67,13 +72,49 @@ const created = await authedRequest<{
 });
 ```
 
-### 3. Read subscriptions and usage
+### 3. Read subscriptions, sync status, and usage
 
 ```ts
-const [subscriptions, usage] = await Promise.all([
-  authedRequest(getToken, '/account/subscriptions/'),
-  authedRequest(getToken, '/ai/usage/summary/'),
-]);
+const syncStatus = await authedRequest(getToken, '/account/subscriptions/status/');
+let subscriptions = await authedRequest(getToken, '/account/subscriptions/');
+
+// Explicitly force a sync attempt only when needed (for example, stale badge retry):
+const refreshedSync = await authedRequest(getToken, '/account/subscriptions/status/?refresh=1');
+subscriptions = await authedRequest(getToken, '/account/subscriptions/');
+
+const usage = await authedRequest(getToken, '/ai/usage/summary/');
+```
+
+### 4. Estimate tokens before submit (backend estimate)
+
+```ts
+const estimate = await authedRequest<{
+  model: string;
+  estimated_tokens: { total: number };
+}>(getToken, '/ai/tokens/estimate/', {
+  method: 'POST',
+  body: {
+    model: 'gpt-4.1-mini',
+    messages: [{ role: 'user', content: 'Draft a launch email.' }],
+  },
+});
+```
+
+### 5. Run debug chat pipeline (usage enforced server-side)
+
+```ts
+const debug = await authedRequest<{
+  assistant_message: string;
+  usage: { total_tokens: number; cycle_tokens_remaining: number | null };
+}>(getToken, '/ai/chat/complete/', {
+  method: 'POST',
+  body: {
+    provider: 'simulator',
+    model: 'gpt-4.1-mini',
+    messages: [{ role: 'user', content: 'Generate a short test response.' }],
+    max_output_tokens: 180,
+  },
+});
 ```
 
 ## Payment contract summary

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from django.conf import settings
@@ -50,6 +50,7 @@ from ..serializers import (
     OrderSerializer,
     SubscriptionSerializer,
 )
+from ..tools.auth.clerk import ClerkClientError, get_clerk_client
 from ..webhooks.handlers import handle_billing_subscription_canceled, handle_billing_subscription_upsert
 from ..webhooks.helpers import _extract_clerk_user_id_from_subscription_payload
 from .helpers import _safe_dict, _safe_str, get_request_customer_account
@@ -74,6 +75,200 @@ SUBSCRIPTION_CANCELED_EVENT_TYPES = {
     "billing.subscription.cancelled",
 }
 SUBSCRIPTION_BACKFILL_EVENT_LIMIT = 200
+BILLING_SYNC_METADATA_KEY = "billing_sync"
+BILLING_SYNC_STATE_FRESH = "fresh"
+BILLING_SYNC_STATE_SOFT_STALE = "soft_stale"
+BILLING_SYNC_STATE_HARD_STALE = "hard_stale"
+BILLING_SYNC_REASON_FRESH = "fresh"
+BILLING_SYNC_REASON_SOFT_STALE = "soft_stale"
+BILLING_SYNC_REASON_HARD_STALE = "hard_stale"
+BILLING_SYNC_REASON_NEVER_SYNCED = "never_synced"
+BILLING_SYNC_REASON_FRESH_WITH_SYNC_ERROR = "fresh_with_sync_error"
+BILLING_SYNC_REASON_SOFT_STALE_WITH_SYNC_ERROR = "soft_stale_with_sync_error"
+BILLING_SYNC_REASON_HARD_STALE_WITH_SYNC_ERROR = "hard_stale_with_sync_error"
+
+
+def _coerce_non_negative_int(raw_value: Any, default: int) -> int:
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return int(default)
+    return max(parsed, 0)
+
+
+def _is_truthy_query_flag(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _billing_sync_windows() -> tuple[int, int]:
+    soft_window_seconds = _coerce_non_negative_int(
+        getattr(settings, "BILLING_SYNC_SOFT_STALE_SECONDS", 900),
+        900,
+    )
+    hard_ttl_seconds = _coerce_non_negative_int(
+        getattr(settings, "BILLING_SYNC_HARD_TTL_SECONDS", 10800),
+        10800,
+    )
+    if hard_ttl_seconds <= soft_window_seconds:
+        hard_ttl_seconds = soft_window_seconds + 1
+    return soft_window_seconds, hard_ttl_seconds
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _load_billing_sync_metadata(account) -> dict[str, Any]:
+    metadata = account.metadata if isinstance(account.metadata, dict) else {}
+    sync_metadata = metadata.get(BILLING_SYNC_METADATA_KEY)
+    if isinstance(sync_metadata, dict):
+        return dict(sync_metadata)
+    return {}
+
+
+def _save_billing_sync_metadata(account, sync_metadata: dict[str, Any]) -> None:
+    metadata = account.metadata if isinstance(account.metadata, dict) else {}
+    next_metadata = dict(metadata)
+    next_metadata[BILLING_SYNC_METADATA_KEY] = sync_metadata
+    if next_metadata == metadata:
+        return
+    account.metadata = next_metadata
+    account.save(update_fields=["metadata", "updated_at"])
+
+
+def _record_billing_sync_attempt(
+    account,
+    *,
+    attempted_at: datetime,
+    success: bool,
+    reason_code: str,
+    error_code: str = "",
+    detail: str = "",
+) -> None:
+    sync_metadata = _load_billing_sync_metadata(account)
+    sync_metadata["last_attempt_at"] = attempted_at.isoformat()
+    sync_metadata["last_attempt_succeeded"] = bool(success)
+    sync_metadata["last_reason_code"] = str(reason_code or "").strip()
+    sync_metadata["last_error_code"] = str(error_code or "").strip()
+
+    sanitized_detail = str(detail or "").strip()
+    if sanitized_detail:
+        sync_metadata["last_error_detail"] = sanitized_detail[:240]
+    else:
+        sync_metadata.pop("last_error_detail", None)
+
+    if success:
+        sync_metadata["last_success_at"] = attempted_at.isoformat()
+        sync_metadata["last_error_code"] = ""
+        sync_metadata.pop("last_error_detail", None)
+
+    _save_billing_sync_metadata(account, sync_metadata)
+
+
+def get_billing_sync_status(account, *, now: datetime | None = None) -> dict[str, Any]:
+    now = now or django_timezone.now()
+    soft_window_seconds, hard_ttl_seconds = _billing_sync_windows()
+    sync_metadata = _load_billing_sync_metadata(account)
+
+    last_attempt_at_raw = sync_metadata.get("last_attempt_at")
+    last_success_at_raw = sync_metadata.get("last_success_at")
+    last_attempt_at = _parse_iso_datetime(last_attempt_at_raw)
+    last_success_at = _parse_iso_datetime(last_success_at_raw)
+
+    last_attempt_succeeded_raw = sync_metadata.get("last_attempt_succeeded")
+    last_attempt_succeeded = (
+        bool(last_attempt_succeeded_raw)
+        if isinstance(last_attempt_succeeded_raw, bool)
+        else None
+    )
+    last_error_code = str(sync_metadata.get("last_error_code") or "").strip()
+    last_reason_code = str(sync_metadata.get("last_reason_code") or "").strip()
+    age_seconds = None
+
+    if last_success_at is None:
+        state = BILLING_SYNC_STATE_HARD_STALE
+        reason_code = BILLING_SYNC_REASON_NEVER_SYNCED
+        blocking = True
+    else:
+        age_seconds = max(int((now - last_success_at).total_seconds()), 0)
+        if age_seconds <= soft_window_seconds:
+            state = BILLING_SYNC_STATE_FRESH
+            reason_code = BILLING_SYNC_REASON_FRESH
+            blocking = False
+        elif age_seconds <= hard_ttl_seconds:
+            state = BILLING_SYNC_STATE_SOFT_STALE
+            reason_code = BILLING_SYNC_REASON_SOFT_STALE
+            blocking = False
+        else:
+            state = BILLING_SYNC_STATE_HARD_STALE
+            reason_code = BILLING_SYNC_REASON_HARD_STALE
+            blocking = True
+
+    if (
+        state == BILLING_SYNC_STATE_FRESH
+        and last_success_at is not None
+        and last_attempt_at is not None
+        and last_attempt_at > last_success_at
+        and last_attempt_succeeded is False
+        and last_error_code
+    ):
+        reason_code = BILLING_SYNC_REASON_FRESH_WITH_SYNC_ERROR
+    elif state == BILLING_SYNC_STATE_SOFT_STALE and last_error_code:
+        reason_code = BILLING_SYNC_REASON_SOFT_STALE_WITH_SYNC_ERROR
+    elif state == BILLING_SYNC_STATE_HARD_STALE and last_error_code:
+        reason_code = BILLING_SYNC_REASON_HARD_STALE_WITH_SYNC_ERROR
+
+    if blocking:
+        detail = str(
+            getattr(
+                settings,
+                "BILLING_SYNC_HARD_BLOCK_MESSAGE",
+                "Billing verification is stale. Retry in a moment.",
+            )
+            or "Billing verification is stale. Retry in a moment."
+        ).strip()
+    elif state == BILLING_SYNC_STATE_SOFT_STALE:
+        detail = str(
+            getattr(
+                settings,
+                "BILLING_SYNC_SOFT_WARNING_MESSAGE",
+                "Billing sync is delayed. Usage enforcement still applies.",
+            )
+            or "Billing sync is delayed. Usage enforcement still applies."
+        ).strip()
+    elif reason_code == BILLING_SYNC_REASON_FRESH_WITH_SYNC_ERROR:
+        detail = "Recent billing sync attempt failed, but last successful sync is still within the freshness window."
+    else:
+        detail = "Billing sync is healthy."
+
+    if last_reason_code and reason_code == BILLING_SYNC_REASON_FRESH:
+        reason_code = last_reason_code
+
+    return {
+        "state": state,
+        "blocking": bool(blocking),
+        "reason_code": reason_code,
+        "error_code": last_error_code or None,
+        "detail": detail,
+        "last_attempt_at": str(last_attempt_at_raw or "") or None,
+        "last_success_at": str(last_success_at_raw or "") or None,
+        "age_seconds": age_seconds,
+        "soft_window_seconds": soft_window_seconds,
+        "hard_ttl_seconds": hard_ttl_seconds,
+    }
 
 
 def _billing_period_end(start_at, billing_period: str):
@@ -410,6 +605,244 @@ def _backfill_subscriptions_from_webhook_history(account) -> None:
             handle_billing_subscription_upsert(data)
 
 
+def _to_plain_data(value: Any, *, _depth: int = 0) -> Any:
+    if _depth > 8:
+        return value
+
+    if isinstance(value, dict):
+        return {str(key): _to_plain_data(raw, _depth=_depth + 1) for key, raw in value.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        return [_to_plain_data(item, _depth=_depth + 1) for item in value]
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _to_plain_data(model_dump(), _depth=_depth + 1)
+        except Exception:
+            logger.debug("Failed model_dump() when normalizing Clerk payload object: %s", type(value).__name__)
+
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        try:
+            return _to_plain_data(to_dict(), _depth=_depth + 1)
+        except Exception:
+            logger.debug("Failed to_dict() when normalizing Clerk payload object: %s", type(value).__name__)
+
+    values = getattr(value, "__dict__", None)
+    if isinstance(values, dict):
+        return {
+            str(key): _to_plain_data(raw, _depth=_depth + 1)
+            for key, raw in values.items()
+            if not str(key).startswith("_")
+        }
+
+    return value
+
+
+def _extract_subscription_payloads_from_clerk_response(raw_response: Any) -> list[dict[str, Any]]:
+    normalized = _to_plain_data(raw_response)
+    if not isinstance(normalized, dict):
+        return []
+
+    roots: list[dict[str, Any]] = [normalized]
+    data = normalized.get("data")
+    if isinstance(data, dict):
+        roots.append(data)
+
+    payloads: list[dict[str, Any]] = []
+    for root in roots:
+        direct_subscription = root.get("subscription")
+        if isinstance(direct_subscription, dict):
+            payloads.append(direct_subscription)
+
+        billing = root.get("billing")
+        if isinstance(billing, dict):
+            nested_subscription = billing.get("subscription")
+            if isinstance(nested_subscription, dict):
+                payloads.append(nested_subscription)
+
+        nested_subscriptions = root.get("subscriptions")
+        if isinstance(nested_subscriptions, list):
+            payloads.extend(
+                payload for payload in nested_subscriptions if isinstance(payload, dict)
+            )
+
+    deduped_payloads: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for payload in payloads:
+        key = str(payload.get("id") or payload.get("subscription_id") or payload)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped_payloads.append(payload)
+
+    return deduped_payloads
+
+
+def _clerk_response_explicitly_has_no_subscription(raw_response: Any) -> bool:
+    normalized = _to_plain_data(raw_response)
+    if not isinstance(normalized, dict):
+        return False
+
+    roots: list[dict[str, Any]] = [normalized]
+    data = normalized.get("data")
+    if isinstance(data, dict):
+        roots.append(data)
+
+    for root in roots:
+        if "subscription" in root and root.get("subscription") is None:
+            return True
+
+        billing = root.get("billing")
+        if isinstance(billing, dict) and "subscription" in billing and billing.get("subscription") is None:
+            return True
+
+    return False
+
+
+def _backfill_subscriptions_from_clerk_api(account) -> dict[str, Any]:
+    clerk_user_id = str(account.profile.clerk_user_id or account.external_customer_id or "").strip()
+    if not clerk_user_id:
+        return {
+            "success": False,
+            "reason_code": "missing_clerk_user_id",
+            "error_code": "missing_clerk_user_id",
+            "detail": "Account is missing Clerk user id.",
+        }
+
+    try:
+        client = get_clerk_client()
+        response = client.users.get_billing_subscription(user_id=clerk_user_id)
+    except ClerkClientError as exc:
+        logger.debug(
+            "Skipping direct Clerk subscription sync for account %s: %s",
+            account.id,
+            exc,
+        )
+        return {
+            "success": False,
+            "reason_code": "clerk_client_unavailable",
+            "error_code": "clerk_client_unavailable",
+            "detail": str(exc),
+        }
+    except Exception as exc:
+        logger.exception(
+            "Direct Clerk subscription sync failed for account %s (clerk_user_id=%s).",
+            account.id,
+            clerk_user_id,
+        )
+        return {
+            "success": False,
+            "reason_code": "clerk_api_error",
+            "error_code": "clerk_api_error",
+            "detail": str(exc),
+        }
+
+    subscription_payloads = _extract_subscription_payloads_from_clerk_response(response)
+    if not subscription_payloads:
+        if _clerk_response_explicitly_has_no_subscription(response):
+            existing_rows = Subscription.objects.filter(customer_account=account).exclude(clerk_subscription_id__isnull=True)
+            for row in existing_rows:
+                if row.status == Subscription.Status.CANCELED:
+                    continue
+                handle_billing_subscription_canceled(
+                    {
+                        "id": row.clerk_subscription_id,
+                        "user_id": clerk_user_id,
+                        "canceled_at": django_timezone.now().isoformat(),
+                    }
+                )
+            return {
+                "success": True,
+                "reason_code": "no_active_subscription",
+                "error_code": "",
+                "detail": "",
+                "synced_count": 0,
+            }
+        logger.debug(
+            "Direct Clerk subscription sync returned no subscription payloads for account %s.",
+            account.id,
+        )
+        return {
+            "success": True,
+            "reason_code": "no_subscription_payload",
+            "error_code": "",
+            "detail": "",
+            "synced_count": 0,
+        }
+
+    synced_count = 0
+    failed_count = 0
+    for payload in subscription_payloads:
+        normalized_payload = dict(payload)
+        if not _extract_clerk_user_id_from_subscription_payload(normalized_payload):
+            normalized_payload["user_id"] = clerk_user_id
+
+        try:
+            handle_billing_subscription_upsert(normalized_payload)
+            synced_count += 1
+        except Exception:
+            failed_count += 1
+            logger.exception(
+                "Failed to upsert Clerk billing subscription payload for account %s during direct sync.",
+                account.id,
+            )
+
+    if synced_count:
+        logger.info(
+            "Direct Clerk subscription sync upserted %s payload(s) for account %s.",
+            synced_count,
+            account.id,
+        )
+
+    if synced_count == 0 and failed_count > 0:
+        return {
+            "success": False,
+            "reason_code": "subscription_upsert_failed",
+            "error_code": "subscription_upsert_failed",
+            "detail": "Clerk subscription payloads could not be applied to local records.",
+            "synced_count": 0,
+        }
+
+    if failed_count > 0:
+        return {
+            "success": True,
+            "reason_code": "synced_with_partial_errors",
+            "error_code": "",
+            "detail": "",
+            "synced_count": synced_count,
+        }
+
+    return {
+        "success": True,
+        "reason_code": "synced",
+        "error_code": "",
+        "detail": "",
+        "synced_count": synced_count,
+    }
+
+
+def ensure_billing_sync(account, *, force: bool = False) -> dict[str, Any]:
+    now = django_timezone.now()
+    status_before = get_billing_sync_status(account, now=now)
+    if not force and status_before["state"] == BILLING_SYNC_STATE_FRESH:
+        return status_before
+
+    _backfill_subscriptions_from_webhook_history(account)
+    outcome = _backfill_subscriptions_from_clerk_api(account)
+    attempted_at = django_timezone.now()
+    _record_billing_sync_attempt(
+        account,
+        attempted_at=attempted_at,
+        success=bool(outcome.get("success")),
+        reason_code=str(outcome.get("reason_code") or ""),
+        error_code=str(outcome.get("error_code") or ""),
+        detail=str(outcome.get("detail") or ""),
+    )
+    return get_billing_sync_status(account, now=attempted_at)
+
+
 class AccountCustomerView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -631,8 +1064,18 @@ class AccountSubscriptionListView(generics.ListAPIView):
 
     def get_queryset(self):
         account = get_request_customer_account(self.request)
-        _backfill_subscriptions_from_webhook_history(account)
         return Subscription.objects.filter(customer_account=account).select_related("product", "price")
+
+
+class AccountSubscriptionSyncStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        account = get_request_customer_account(request)
+        refresh_requested = _is_truthy_query_flag(request.query_params.get("refresh"))
+        if refresh_requested:
+            return Response(ensure_billing_sync(account, force=True))
+        return Response(get_billing_sync_status(account))
 
 
 class AccountEntitlementListView(generics.ListAPIView):

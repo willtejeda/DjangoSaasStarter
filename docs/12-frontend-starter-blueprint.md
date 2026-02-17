@@ -50,7 +50,14 @@ Main route matcher:
 
 - `./frontend/src/shared/types.ts`
 - `./frontend/src/shared/ui-utils.ts`
+- `./frontend/src/shared/token-estimator.ts`
 - `./frontend/src/lib/api.ts`
+
+Billing sync status contract for frontend surfaces:
+
+- Read subscriptions from `GET /api/account/subscriptions/` as local projection only
+- Read cached status from `GET /api/account/subscriptions/status/`
+- Trigger explicit retry only when needed via `GET /api/account/subscriptions/status/?refresh=1`
 
 ## Starter page blocks to keep
 

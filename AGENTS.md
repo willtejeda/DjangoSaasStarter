@@ -179,9 +179,20 @@ Local-only fallback controls:
 
 - `ORDER_CONFIRM_ALLOW_MANUAL`
 - `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM`
-- `VITE_ENABLE_DEV_MANUAL_CHECKOUT`
+- `ORDER_CONFIRM_SHARED_SECRET`
 
 Set these to safe defaults in production.
+
+Billing sync controls:
+
+- `BILLING_SYNC_SOFT_STALE_SECONDS`
+- `BILLING_SYNC_HARD_TTL_SECONDS`
+- `BILLING_SYNC_SOFT_WARNING_MESSAGE`
+- `BILLING_SYNC_HARD_BLOCK_MESSAGE`
+
+`GET /api/account/subscriptions/status/` is read-only cached status.
+Use `?refresh=1` only for explicit retries.
+`GET /api/account/subscriptions/` is read-only local projection and should not trigger Clerk sync.
 
 ### Step 8: Validate account UX
 
@@ -307,7 +318,10 @@ Direct client-side order confirmation is disabled by default and must not be ena
 - `ORDER_CONFIRM_ALLOW_MANUAL`
 - `ORDER_CONFIRM_ALLOW_CLIENT_SIDE_CLERK_CONFIRM`
 - `ORDER_CONFIRM_SHARED_SECRET`
-- `VITE_ENABLE_DEV_MANUAL_CHECKOUT` (development only)
+- `BILLING_SYNC_SOFT_STALE_SECONDS`
+- `BILLING_SYNC_HARD_TTL_SECONDS`
+- `BILLING_SYNC_SOFT_WARNING_MESSAGE`
+- `BILLING_SYNC_HARD_BLOCK_MESSAGE`
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_BASE_URL`
 - `OPENROUTER_DEFAULT_MODEL`

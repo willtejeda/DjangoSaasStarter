@@ -13,9 +13,6 @@ import {
   sectionClass,
 } from '../../shared/ui-utils';
 
-const ENABLE_DEV_MANUAL_CHECKOUT =
-  (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
-
 type ProductTypeValue = 'digital' | 'service';
 type BillingPeriodValue = 'one_time' | 'monthly' | 'yearly';
 
@@ -243,27 +240,6 @@ export function ProductCatalogPage({ onNavigate, getToken }: ProductCatalogProps
 
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
-        return;
-      }
-
-      if (ENABLE_DEV_MANUAL_CHECKOUT) {
-        await authedRequest<unknown, { provider: string; external_id: string }>(
-          getToken,
-          `/account/orders/${publicId}/confirm/`,
-          {
-            method: 'POST',
-            body: {
-              provider: 'manual',
-              external_id: `manual_${Date.now()}`,
-            },
-          }
-        );
-        notify({
-          title: 'Manual checkout confirmed',
-          detail: 'Order marked paid for local development mode.',
-          variant: 'success',
-        });
-        onNavigate('/account/purchases');
         return;
       }
 

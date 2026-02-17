@@ -105,6 +105,11 @@ class ProjectApiTests(TestCase):
         self.assertTrue(response.data["enabled"])
 
     @override_settings(
+        AI_SIMULATOR_ENABLED=True,
+        AI_PROVIDER_CALLS_ENABLED=True,
+        OPENAI_API_KEY="sk-openai-test",
+        OPENAI_BASE_URL="https://api.openai.com/v1",
+        OPENAI_DEFAULT_MODEL="gpt-4.1-mini",
         OPENROUTER_API_KEY="or_test_key",
         OPENROUTER_BASE_URL="https://openrouter.ai/api/v1",
         OPENROUTER_DEFAULT_MODEL="openai/gpt-4.1-mini",
@@ -115,9 +120,14 @@ class ProjectApiTests(TestCase):
         response = self._request("get", "/api/ai/providers/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data), 4)
+        simulator = next(item for item in response.data if item["key"] == "simulator")
+        openai = next(item for item in response.data if item["key"] == "openai")
         openrouter = next(item for item in response.data if item["key"] == "openrouter")
         ollama = next(item for item in response.data if item["key"] == "ollama")
+        self.assertTrue(simulator["enabled"])
+        self.assertTrue(openai["enabled"])
+        self.assertEqual(openai["base_url"], "https://api.openai.com/v1")
         self.assertTrue(openrouter["enabled"])
         self.assertEqual(openrouter["base_url"], "https://openrouter.ai/api/v1")
         self.assertEqual(openrouter["model_hint"], "openai/gpt-4.1-mini")

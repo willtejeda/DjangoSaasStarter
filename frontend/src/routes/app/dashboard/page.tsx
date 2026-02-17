@@ -6,8 +6,11 @@ import { MetricCard, PageIntro, StatusPill, TutorialBlock, UsageBar } from '../.
 import { useToast } from '../../../components/feedback/toast';
 import { apiRequest, authedRequest, getApiBaseUrl } from '../../../lib/api';
 import type {
+  AiChatCompleteResponse,
+  AiImageGenerateResponse,
   AiProviderRecord,
   AiUsageSummaryResponse,
+  BillingSyncStatus,
   BillingFeaturesResponse,
   DashboardProps,
   DownloadAccessResponse,
@@ -21,6 +24,7 @@ import type {
   SupabaseProbeResponse,
   WorkOrderRecord,
 } from '../../../shared/types';
+import { countChatTokensEstimate, countChatTokensHeuristic } from '../../../shared/token-estimator';
 import {
   buttonGhost,
   buttonPrimary,
@@ -35,6 +39,18 @@ import {
 
 const BILLING_PORTAL_URL = (import.meta.env.VITE_CLERK_BILLING_PORTAL_URL || '').trim();
 const PREFLIGHT_EMAIL_STORAGE_KEY = 'ds-preflight-email-test';
+const DEFAULT_BILLING_SYNC_STATUS: BillingSyncStatus = {
+  state: 'hard_stale',
+  blocking: true,
+  reason_code: 'unknown',
+  error_code: null,
+  detail: 'Billing sync status unavailable.',
+  last_attempt_at: null,
+  last_success_at: null,
+  age_seconds: null,
+  soft_window_seconds: 900,
+  hard_ttl_seconds: 10800,
+};
 
 function isInternalClerkLikeId(value: string): boolean {
   const normalized = value.trim();
@@ -80,6 +96,18 @@ function friendlyNameFromEmail(email?: string | null): string {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
+function formatSyncStatusTimestamp(value?: string | null): string {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return 'Never';
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Unknown';
+  }
+  return parsed.toLocaleString();
+}
+
 export function AccountDashboard({ onNavigate, getToken }: DashboardProps): ReactElement {
   const notify = useToast();
   const { isLoaded, userId } = useAuth();
@@ -89,12 +117,24 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
   const [billing, setBilling] = useState<BillingFeaturesResponse>({ enabled_features: [] });
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
+  const [billingSync, setBillingSync] = useState<BillingSyncStatus>(DEFAULT_BILLING_SYNC_STATUS);
   const [downloads, setDownloads] = useState<DownloadGrant[]>([]);
   const [entitlements, setEntitlements] = useState<EntitlementRecord[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<ProductRecord[]>([]);
   const [aiProviders, setAiProviders] = useState<AiProviderRecord[]>([]);
   const [aiUsage, setAiUsage] = useState<AiUsageSummaryResponse>({ period: 'current', plan_tier: 'free', buckets: [], notes: [] });
+  const [chatPrompt, setChatPrompt] = useState('Give me a short debug reply about usage enforcement.');
+  const [chatModelHint, setChatModelHint] = useState('gpt-4.1-mini');
+  const [chatSubmitting, setChatSubmitting] = useState(false);
+  const [chatResult, setChatResult] = useState<AiChatCompleteResponse | null>(null);
+  const [frontendPromptTokenEstimate, setFrontendPromptTokenEstimate] = useState(() =>
+    countChatTokensHeuristic([{ role: 'user', content: 'Give me a short debug reply about usage enforcement.' }])
+  );
+  const [imagePrompt, setImagePrompt] = useState('A minimal desk setup product photo');
+  const [imageCount, setImageCount] = useState(1);
+  const [imageSubmitting, setImageSubmitting] = useState(false);
+  const [imageResult, setImageResult] = useState<AiImageGenerateResponse | null>(null);
   const [supabaseProbe, setSupabaseProbe] = useState<{ checked: boolean; ok: boolean; detail: string }>({
     checked: false,
     ok: false,
@@ -174,7 +214,6 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
         workOrdersPayload,
         catalogPayload,
         aiProvidersPayload,
-        aiUsagePayload,
         supabaseProbePayload,
       ] = await Promise.all([
         authedRequest<MeResponse>(getToken, '/me/'),
@@ -186,12 +225,6 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
         authedRequest<WorkOrderRecord[]>(getToken, '/account/orders/work/'),
         apiRequest<ProductRecord[]>('/products/').catch(() => []),
         authedRequest<AiProviderRecord[]>(getToken, '/ai/providers/').catch(() => []),
-        authedRequest<AiUsageSummaryResponse>(getToken, '/ai/usage/summary/').catch(() => ({
-          period: 'current',
-          plan_tier: 'free',
-          buckets: [],
-          notes: [],
-        })),
         authedRequest<SupabaseProbeResponse>(getToken, '/supabase/profile/')
           .then((payload) => {
             const ok = payload?.ok ?? true;
@@ -212,10 +245,20 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
             detail: probeError instanceof Error ? probeError.message : 'Supabase probe failed.',
           })),
       ]);
+      const billingSyncPayload = await authedRequest<BillingSyncStatus>(getToken, '/account/subscriptions/status/').catch(
+        () => DEFAULT_BILLING_SYNC_STATUS
+      );
+      const aiUsagePayload = await authedRequest<AiUsageSummaryResponse>(getToken, '/ai/usage/summary/').catch(() => ({
+        period: 'current',
+        plan_tier: 'free',
+        buckets: [],
+        notes: [],
+      }));
       setMe(mePayload || null);
       setBilling(billingPayload || { enabled_features: [] });
       setOrders(Array.isArray(ordersPayload) ? ordersPayload : []);
       setSubscriptions(Array.isArray(subscriptionsPayload) ? subscriptionsPayload : []);
+      setBillingSync(billingSyncPayload || DEFAULT_BILLING_SYNC_STATUS);
       setDownloads(Array.isArray(downloadsPayload) ? downloadsPayload : []);
       setEntitlements(Array.isArray(entitlementsPayload) ? entitlementsPayload : []);
       setWorkOrders(Array.isArray(workOrdersPayload) ? workOrdersPayload : []);
@@ -318,6 +361,124 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
   const configuredAiProviders = aiProviders.filter((provider) => provider.enabled).length;
   const bucketsNearLimit = aiUsage.buckets.filter((bucket) => bucket.near_limit).length;
   const subscriptionUsageReady = activeSubscriptions.length > 0 && aiUsage.buckets.length > 0;
+  const simulatorEnabled = aiProviders.some((provider) => provider.key === 'simulator' && provider.enabled);
+
+  useEffect(() => {
+    const messages = [{ role: 'user', content: chatPrompt }];
+    setFrontendPromptTokenEstimate(countChatTokensHeuristic(messages));
+
+    let canceled = false;
+    void countChatTokensEstimate(messages, chatModelHint)
+      .then((value) => {
+        if (!canceled) {
+          setFrontendPromptTokenEstimate(value);
+        }
+      })
+      .catch(() => {
+        // Keep heuristic value when precise tokenizer load fails.
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [chatPrompt, chatModelHint]);
+
+  useEffect(() => {
+    if (aiProviders.length === 0) {
+      return;
+    }
+    if (!chatModelHint || chatModelHint === 'gpt-4.1-mini') {
+      const candidateModel =
+        aiProviders.find((provider) => provider.key === 'openrouter')?.model_hint
+        || aiProviders.find((provider) => provider.key === 'openai')?.model_hint
+        || aiProviders.find((provider) => provider.key === 'ollama')?.model_hint
+        || 'gpt-4.1-mini';
+      setChatModelHint(String(candidateModel || 'gpt-4.1-mini'));
+    }
+  }, [aiProviders, chatModelHint]);
+
+  const runDebugChat = async (): Promise<void> => {
+    if (!simulatorEnabled) {
+      notify({
+        title: 'Simulator unavailable',
+        detail: 'Enable AI_SIMULATOR_ENABLED on the backend to run debug chat without provider costs.',
+        variant: 'error',
+      });
+      return;
+    }
+    if (!chatPrompt.trim()) {
+      notify({ title: 'Prompt required', detail: 'Enter a prompt before running chat.', variant: 'error' });
+      return;
+    }
+
+    setChatSubmitting(true);
+    setError('');
+    try {
+      const payload = await authedRequest<AiChatCompleteResponse>(getToken, '/ai/chat/complete/', {
+        method: 'POST',
+        body: {
+          provider: 'simulator',
+          model: chatModelHint,
+          max_output_tokens: 180,
+          messages: [{ role: 'user', content: chatPrompt }],
+        },
+      });
+      setChatResult(payload);
+      notify({
+        title: 'Debug chat completed',
+        detail: `Server recorded ${payload.usage.total_tokens} tokens for this request.`,
+        variant: 'success',
+      });
+      await loadDashboard({ silent: true });
+    } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : 'Debug chat failed.';
+      setError(detail);
+      notify({ title: 'Debug chat failed', detail, variant: 'error' });
+    } finally {
+      setChatSubmitting(false);
+    }
+  };
+
+  const runDebugImageGeneration = async (): Promise<void> => {
+    if (!simulatorEnabled) {
+      notify({
+        title: 'Simulator unavailable',
+        detail: 'Enable AI_SIMULATOR_ENABLED on the backend to run debug image generation.',
+        variant: 'error',
+      });
+      return;
+    }
+    if (!imagePrompt.trim()) {
+      notify({ title: 'Prompt required', detail: 'Enter an image prompt first.', variant: 'error' });
+      return;
+    }
+
+    setImageSubmitting(true);
+    setError('');
+    try {
+      const payload = await authedRequest<AiImageGenerateResponse>(getToken, '/ai/images/generate/', {
+        method: 'POST',
+        body: {
+          provider: 'simulator',
+          prompt: imagePrompt,
+          count: imageCount,
+          size: '1024x1024',
+        },
+      });
+      setImageResult(payload);
+      notify({
+        title: 'Debug images generated',
+        detail: `Server recorded ${payload.usage.images_generated} image unit(s).`,
+        variant: 'success',
+      });
+      await loadDashboard({ silent: true });
+    } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : 'Debug image generation failed.';
+      setError(detail);
+      notify({ title: 'Debug image generation failed', detail, variant: 'error' });
+    } finally {
+      setImageSubmitting(false);
+    }
+  };
 
   const sendPreflightEmailTest = async (): Promise<void> => {
     setEmailTestStatus((previous) => ({
@@ -604,6 +765,11 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
           <MetricCard label="Offers" value={String(publishedProducts)} note={`${pricedProducts} with active price`} />
           <MetricCard label="Paid Orders" value={String(paidOrders)} note={`${orders.length} total purchases`} />
           <MetricCard label="Active Subs" value={String(activeSubscriptions.length)} note={`${subscriptions.length} total subscriptions`} />
+          <MetricCard
+            label="Billing Sync"
+            value={String(billingSync.state || 'unknown').toUpperCase()}
+            note={`Last synced ${formatSyncStatusTimestamp(billingSync.last_success_at)}`}
+          />
           <MetricCard label="Downloads" value={String(readyDownloads)} note={`${downloads.length} total deliveries`} />
           <MetricCard label="Entitlements" value={String(currentEntitlements)} note="Current access records" />
           <MetricCard label="Work Orders" value={String(openServiceRequests)} note="Fulfillment in progress" />
@@ -704,6 +870,28 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
                 Open
               </button>
             </div>
+            <article
+              className={cn(
+                'mt-3 rounded-xl border p-3',
+                billingSync.blocking
+                  ? 'border-rose-300 bg-rose-50/60 dark:border-rose-800 dark:bg-rose-900/20'
+                  : billingSync.state === 'soft_stale'
+                    ? 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-900/20'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Billing sync</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">{billingSync.detail}</p>
+                </div>
+                <StatusPill value={billingSync.state} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Last synced: {formatSyncStatusTimestamp(billingSync.last_success_at)} | reason: {billingSync.reason_code}
+                {billingSync.error_code ? ` | error: ${billingSync.error_code}` : ''}
+              </p>
+            </article>
             {loading ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading subscriptions...</p> : null}
             {!loading && activeSubscriptions.length === 0 ? (
               <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">No active subscriptions found.</p>
@@ -747,7 +935,7 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
           <article className={cardClass}>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">AI provider and usage scaffold</h3>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Built-in placeholders for OpenRouter and Ollama help you wire AI products with usage-aware subscription plans.
+              Backend usage events are authoritative. Frontend token counts are estimate-only and intended for pre-submit UX.
             </p>
             <div className="mt-3 space-y-2">
               {aiProviders.map((provider) => (
@@ -766,6 +954,97 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
                 <p className="text-sm text-slate-600 dark:text-slate-300">No providers detected yet.</p>
               ) : null}
             </div>
+            <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Debug chat simulator</h4>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                Frontend estimate: {frontendPromptTokenEstimate} token(s) before submit.
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                The backend will re-count and enforce quota using server-side ledger data.
+              </p>
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Model Hint
+              </label>
+              <input
+                type="text"
+                value={chatModelHint}
+                onChange={(event) => setChatModelHint(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-cyan-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Prompt
+              </label>
+              <textarea
+                value={chatPrompt}
+                onChange={(event) => setChatPrompt(event.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-cyan-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <button
+                type="button"
+                className={cn(buttonPrimary, 'mt-3 w-full')}
+                disabled={chatSubmitting || !simulatorEnabled}
+                onClick={() => {
+                  void runDebugChat();
+                }}
+              >
+                {chatSubmitting ? 'Running debug chat...' : 'Run Debug Chat'}
+              </button>
+              {chatResult ? (
+                <div className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-800">
+                  <p className="font-semibold text-slate-900 dark:text-white">Server usage</p>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    {chatResult.usage.input_tokens} in + {chatResult.usage.output_tokens} out = {chatResult.usage.total_tokens} total
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    Cycle remaining: {chatResult.usage.cycle_tokens_remaining ?? 'unlimited'}
+                  </p>
+                  <p className="text-slate-700 dark:text-slate-200">{chatResult.assistant_message}</p>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Debug image simulator</h4>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">One generated image is counted as one usage unit.</p>
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Prompt
+              </label>
+              <input
+                type="text"
+                value={imagePrompt}
+                onChange={(event) => setImagePrompt(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-cyan-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Count
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={imageCount}
+                onChange={(event) => setImageCount(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-cyan-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <button
+                type="button"
+                className={cn(buttonPrimary, 'mt-3 w-full')}
+                disabled={imageSubmitting || !simulatorEnabled}
+                onClick={() => {
+                  void runDebugImageGeneration();
+                }}
+              >
+                {imageSubmitting ? 'Generating debug images...' : 'Generate Debug Images'}
+              </button>
+              {imageResult ? (
+                <div className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-800">
+                  <p className="font-semibold text-slate-900 dark:text-white">
+                    Server usage: {imageResult.usage.images_generated} image(s), remaining {imageResult.usage.cycle_images_remaining ?? 'unlimited'}
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300">Generated IDs: {imageResult.images.map((image) => image.id).join(', ')}</p>
+                </div>
+              ) : null}
+            </div>
             <div className="mt-3 space-y-2">
               {aiUsage.buckets.map((bucket) => (
                 <UsageBar key={bucket.key} bucket={bucket} />
@@ -774,6 +1053,11 @@ export function AccountDashboard({ onNavigate, getToken }: DashboardProps): Reac
                 <p className="text-sm text-slate-600 dark:text-slate-300">No usage buckets configured yet.</p>
               ) : null}
             </div>
+            {aiUsage.period_end ? (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Current cycle resets at {new Date(aiUsage.period_end).toLocaleString()}.
+              </p>
+            ) : null}
             {aiUsage.notes.length ? (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
                 {aiUsage.notes.map((note) => (

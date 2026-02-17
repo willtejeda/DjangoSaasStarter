@@ -78,6 +78,19 @@ export interface SubscriptionRecord {
   price_summary?: PriceSummary | null;
 }
 
+export interface BillingSyncStatus {
+  state: string;
+  blocking: boolean;
+  reason_code: string;
+  error_code?: string | null;
+  detail: string;
+  last_attempt_at?: string | null;
+  last_success_at?: string | null;
+  age_seconds?: number | null;
+  soft_window_seconds: number;
+  hard_ttl_seconds: number;
+}
+
 export interface DownloadGrant {
   token: string;
   asset_title: string;
@@ -154,8 +167,64 @@ export interface AiUsageBucketRecord {
 
 export interface AiUsageSummaryResponse {
   period: string;
+  period_start?: string;
+  period_end?: string;
+  period_source?: string;
   plan_tier: string;
   buckets: AiUsageBucketRecord[];
+  billing_sync?: BillingSyncStatus;
+  notes: string[];
+}
+
+export interface AiTokenEstimateResponse {
+  model: string;
+  estimated_tokens: {
+    messages: number;
+    text: number;
+    total: number;
+  };
+  notes: string[];
+}
+
+export interface AiChatCompleteResponse {
+  request_id: string;
+  provider: string;
+  model: string;
+  assistant_message: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cycle_tokens_used: number;
+    cycle_tokens_limit: number | null;
+    cycle_tokens_remaining: number | null;
+    period_start: string;
+    period_end: string;
+  };
+  billing_sync?: BillingSyncStatus;
+  notes: string[];
+}
+
+export interface AiImageGenerateResponse {
+  request_id: string;
+  provider: string;
+  model: string;
+  images: Array<{
+    id: string;
+    url?: string | null;
+    prompt?: string | null;
+    revised_prompt?: string | null;
+    b64_json?: string | null;
+  }>;
+  usage: {
+    images_generated: number;
+    cycle_images_used: number;
+    cycle_images_limit: number | null;
+    cycle_images_remaining: number | null;
+    period_start: string;
+    period_end: string;
+  };
+  billing_sync?: BillingSyncStatus;
   notes: string[];
 }
 

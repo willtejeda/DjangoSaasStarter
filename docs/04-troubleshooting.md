@@ -61,9 +61,26 @@ Checks:
 Checks:
 
 1. Recurring price exists and was used in checkout
-2. Subscription record exists in `/api/account/subscriptions/`
-3. Entitlements are present in `/api/account/entitlements/`
-4. `/api/ai/usage/summary/` returns expected buckets
+2. Read cached sync state from `/api/account/subscriptions/status/`
+3. Trigger explicit retry with `/api/account/subscriptions/status/?refresh=1` when stale or unknown
+4. Subscription record exists in `/api/account/subscriptions/`
+5. Entitlements are present in `/api/account/entitlements/`
+6. `/api/ai/usage/summary/` returns expected buckets
+
+## Billing sync shows stale or blocked
+
+Symptoms:
+
+- `/api/account/subscriptions/status/` returns `soft_stale` or `hard_stale`
+- AI usage-generating endpoints return `billing_sync_hard_stale`
+
+Checks:
+
+1. Read cached status first: `GET /api/account/subscriptions/status/`
+2. Trigger explicit retry: `GET /api/account/subscriptions/status/?refresh=1`
+3. Verify `CLERK_SECRET_KEY` and `CLERK_DOMAIN`
+4. Confirm webhook delivery health and recent billing events
+5. Confirm `BILLING_SYNC_SOFT_STALE_SECONDS` and `BILLING_SYNC_HARD_TTL_SECONDS` match your risk tolerance
 
 ## Frontend shows generic server error
 

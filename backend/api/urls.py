@@ -1,7 +1,10 @@
 from django.urls import path
 
 from .views import (
+    AiChatCompleteView,
+    AiImageGenerateView,
     AiProviderListView,
+    AiTokenEstimateView,
     AiUsageSummaryView,
     AccountBookingListCreateView,
     AccountCustomerView,
@@ -14,6 +17,7 @@ from .views import (
     AccountOrderCreateView,
     AccountOrderListView,
     AccountSubscriptionListView,
+    AccountSubscriptionSyncStatusView,
     BillingFeatureView,
     ClerkUserView,
     HealthView,
@@ -41,6 +45,9 @@ urlpatterns = [
     path("me/clerk/", ClerkUserView.as_view(), name="clerk-user"),
     path("billing/features/", BillingFeatureView.as_view(), name="billing-features"),
     path("ai/providers/", AiProviderListView.as_view(), name="ai-provider-list"),
+    path("ai/tokens/estimate/", AiTokenEstimateView.as_view(), name="ai-token-estimate"),
+    path("ai/chat/complete/", AiChatCompleteView.as_view(), name="ai-chat-complete"),
+    path("ai/images/generate/", AiImageGenerateView.as_view(), name="ai-image-generate"),
     path("ai/usage/summary/", AiUsageSummaryView.as_view(), name="ai-usage-summary"),
     path("projects/", ProjectListCreateView.as_view(), name="project-list"),
     path("projects/<int:pk>/", ProjectDetailView.as_view(), name="project-detail"),
@@ -60,6 +67,11 @@ urlpatterns = [
         name="account-order-confirm",
     ),
     path("account/subscriptions/", AccountSubscriptionListView.as_view(), name="account-subscription-list"),
+    path(
+        "account/subscriptions/status/",
+        AccountSubscriptionSyncStatusView.as_view(),
+        name="account-subscription-sync-status",
+    ),
     path("account/entitlements/", AccountEntitlementListView.as_view(), name="account-entitlement-list"),
     path("account/downloads/", AccountDownloadGrantListView.as_view(), name="account-download-list"),
     path("account/orders/work/", AccountFulfillmentOrderListView.as_view(), name="account-work-order-list"),

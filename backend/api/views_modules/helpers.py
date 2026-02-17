@@ -38,6 +38,13 @@ def _resolve_plan_tier(profile: Profile, claims: dict[str, Any]) -> str:
 
 
 def _build_ai_provider_payload() -> list[dict[str, Any]]:
+    simulator_enabled = bool(getattr(settings, "AI_SIMULATOR_ENABLED", settings.DEBUG))
+    provider_calls_enabled = bool(getattr(settings, "AI_PROVIDER_CALLS_ENABLED", False))
+
+    openai_base = _safe_str(getattr(settings, "OPENAI_BASE_URL", "")) or "https://api.openai.com/v1"
+    openai_key = _safe_str(getattr(settings, "OPENAI_API_KEY", ""))
+    openai_model = _safe_str(getattr(settings, "OPENAI_DEFAULT_MODEL", ""))
+
     openrouter_base = _safe_str(getattr(settings, "OPENROUTER_BASE_URL", "")) or "https://openrouter.ai/api/v1"
     openrouter_key = _safe_str(getattr(settings, "OPENROUTER_API_KEY", ""))
     openrouter_model = _safe_str(getattr(settings, "OPENROUTER_DEFAULT_MODEL", ""))
@@ -47,24 +54,49 @@ def _build_ai_provider_payload() -> list[dict[str, Any]]:
 
     return [
         {
+            "key": "simulator",
+            "label": "Debug Simulator",
+            "kind": "local",
+            "enabled": simulator_enabled,
+            "base_url": "in-process",
+            "model_hint": "debug-sim-v1",
+            "docs_url": "",
+            "env_vars": ["AI_SIMULATOR_ENABLED"],
+        },
+        {
+            "key": "openai",
+            "label": "OpenAI",
+            "kind": "remote",
+            "enabled": bool(openai_key) and provider_calls_enabled,
+            "base_url": openai_base,
+            "model_hint": openai_model,
+            "docs_url": "https://platform.openai.com/docs/overview",
+            "env_vars": ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_DEFAULT_MODEL", "AI_PROVIDER_CALLS_ENABLED"],
+        },
+        {
             "key": "openrouter",
             "label": "OpenRouter",
             "kind": "remote",
-            "enabled": bool(openrouter_key),
+            "enabled": bool(openrouter_key) and provider_calls_enabled,
             "base_url": openrouter_base,
             "model_hint": openrouter_model,
             "docs_url": "https://openrouter.ai/docs/quickstart",
-            "env_vars": ["OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_DEFAULT_MODEL"],
+            "env_vars": [
+                "OPENROUTER_API_KEY",
+                "OPENROUTER_BASE_URL",
+                "OPENROUTER_DEFAULT_MODEL",
+                "AI_PROVIDER_CALLS_ENABLED",
+            ],
         },
         {
             "key": "ollama",
             "label": "Ollama",
             "kind": "self_hosted",
-            "enabled": bool(ollama_model),
+            "enabled": bool(ollama_model) and provider_calls_enabled,
             "base_url": ollama_base,
             "model_hint": ollama_model,
             "docs_url": "https://github.com/ollama/ollama/blob/main/docs/api.md",
-            "env_vars": ["OLLAMA_BASE_URL", "OLLAMA_MODEL"],
+            "env_vars": ["OLLAMA_BASE_URL", "OLLAMA_MODEL", "AI_PROVIDER_CALLS_ENABLED"],
         },
     ]
 

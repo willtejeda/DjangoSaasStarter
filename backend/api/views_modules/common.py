@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 from datetime import datetime, timezone
+from typing import Any
 
 from django.conf import settings
-from django.db.models import Q, Sum
 from django.utils import timezone as django_timezone
-from rest_framework import generics
+from rest_framework import generics, serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import DownloadGrant, Entitlement, Order, Product, Project, Subscription
+from ..models import Product, Project
 from ..serializers import (
     CustomerAccountSerializer,
     ProductDetailSerializer,
@@ -19,7 +20,20 @@ from ..serializers import (
     ProfileSerializer,
     ProjectSerializer,
 )
+from ..tools.ai import (
+    ProviderExecutionError,
+    UsageLimitExceeded,
+    consume_usage_events,
+    count_message_tokens,
+    count_text_tokens,
+    get_plan_limits,
+    get_usage_totals,
+    resolve_usage_period,
+    run_chat,
+    run_images,
+)
 from ..tools.database.supabase import SupabaseConfigurationError, get_supabase_client
+from .account import ensure_billing_sync
 from .helpers import (
     _build_ai_provider_payload,
     _build_usage_bucket,
@@ -95,6 +109,105 @@ class AiProviderListView(APIView):
         return Response(_build_ai_provider_payload())
 
 
+class AiChatMessageSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=["system", "user", "assistant"])
+    content = serializers.CharField(max_length=20000, allow_blank=False)
+    name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class AiTokenEstimateRequestSerializer(serializers.Serializer):
+    model = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    text = serializers.CharField(required=False, allow_blank=True, max_length=50000)
+    messages = AiChatMessageSerializer(many=True, required=False)
+
+    def validate(self, attrs):
+        text = str(attrs.get("text") or "").strip()
+        messages = attrs.get("messages") or []
+        if not text and not messages:
+            raise serializers.ValidationError("Provide either text or messages.")
+        return attrs
+
+
+class AiChatCompleteRequestSerializer(serializers.Serializer):
+    provider = serializers.ChoiceField(
+        choices=["simulator", "openai", "openrouter", "ollama"],
+        required=False,
+    )
+    model = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    messages = AiChatMessageSerializer(many=True, min_length=1)
+    max_output_tokens = serializers.IntegerField(required=False, min_value=1, max_value=4096, default=320)
+
+
+class AiImageGenerateRequestSerializer(serializers.Serializer):
+    provider = serializers.ChoiceField(
+        choices=["simulator", "openai", "openrouter", "ollama"],
+        required=False,
+    )
+    model = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    prompt = serializers.CharField(max_length=5000)
+    count = serializers.IntegerField(required=False, min_value=1, max_value=10, default=1)
+    size = serializers.CharField(required=False, allow_blank=True, max_length=40, default="1024x1024")
+
+
+def _default_chat_provider() -> str:
+    if bool(getattr(settings, "AI_SIMULATOR_ENABLED", settings.DEBUG)):
+        return "simulator"
+    if bool(getattr(settings, "AI_PROVIDER_CALLS_ENABLED", False)):
+        if str(getattr(settings, "OPENROUTER_API_KEY", "") or "").strip():
+            return "openrouter"
+        if str(getattr(settings, "OPENAI_API_KEY", "") or "").strip():
+            return "openai"
+        if str(getattr(settings, "OLLAMA_MODEL", "") or "").strip():
+            return "ollama"
+    return "simulator"
+
+
+def _default_chat_model(provider: str) -> str:
+    fallback = str(getattr(settings, "AI_DEFAULT_CHAT_MODEL", "") or "gpt-4.1-mini")
+    if provider == "openrouter":
+        return str(getattr(settings, "OPENROUTER_DEFAULT_MODEL", "") or fallback)
+    if provider == "openai":
+        return str(getattr(settings, "OPENAI_DEFAULT_MODEL", "") or fallback)
+    if provider == "ollama":
+        return str(getattr(settings, "OLLAMA_MODEL", "") or fallback)
+    return fallback
+
+
+def _default_image_model(provider: str) -> str:
+    if provider == "openrouter":
+        return str(getattr(settings, "OPENROUTER_IMAGE_MODEL", "") or "openai/gpt-image-1")
+    if provider == "openai":
+        return str(getattr(settings, "OPENAI_IMAGE_MODEL", "") or "gpt-image-1")
+    if provider == "ollama":
+        return str(getattr(settings, "OLLAMA_IMAGE_MODEL", "") or "")
+    return "debug-image-v1"
+
+
+def _ensure_provider_mode_allowed(provider: str) -> None:
+    if provider == "simulator":
+        if not bool(getattr(settings, "AI_SIMULATOR_ENABLED", settings.DEBUG)):
+            raise serializers.ValidationError("Simulator mode is disabled. Set AI_SIMULATOR_ENABLED=True to use it.")
+        return
+    if not bool(getattr(settings, "AI_PROVIDER_CALLS_ENABLED", False)):
+        raise serializers.ValidationError(
+            "Provider calls are disabled. Set AI_PROVIDER_CALLS_ENABLED=True to route requests to external providers."
+        )
+
+
+def _billing_sync_blocked_response(billing_sync: dict[str, Any]) -> Response:
+    return Response(
+        {
+            "detail": str(
+                billing_sync.get("detail")
+                or "Billing verification is temporarily unavailable. Retry in a moment."
+            ),
+            "error_code": "billing_sync_hard_stale",
+            "billing_sync": billing_sync,
+        },
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
 class AiUsageSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -102,82 +215,283 @@ class AiUsageSummaryView(APIView):
         profile = get_request_profile(request)
         account = get_request_customer_account(request)
         claims = get_request_claims(request)
+        billing_sync = ensure_billing_sync(account)
 
         plan_tier = _resolve_plan_tier(profile, claims)
         now = django_timezone.now()
-        paid_order_count = Order.objects.filter(
-            customer_account=account,
-            status__in=[Order.Status.PAID, Order.Status.FULFILLED],
-        ).count()
-        active_subscription_count = Subscription.objects.filter(
-            customer_account=account,
-            status__in=[Subscription.Status.ACTIVE, Subscription.Status.TRIALING, Subscription.Status.PAST_DUE],
-        ).count()
-        current_entitlement_count = Entitlement.objects.filter(
-            customer_account=account,
-            is_active=True,
-            starts_at__lte=now,
-        ).filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now)).count()
-        download_total = (
-            DownloadGrant.objects.filter(customer_account=account).aggregate(total=Sum("download_count")).get("total")
-            or 0
-        )
-        has_video_feature = Entitlement.objects.filter(
-            customer_account=account,
-            feature_key__icontains="video",
-            is_active=True,
-        ).exists()
-
-        usage_seed = {
-            "tokens": (active_subscription_count * 24000) + (current_entitlement_count * 1700) + (paid_order_count * 900),
-            "images": (active_subscription_count * 30) + paid_order_count + download_total,
-            "videos": max(active_subscription_count - 1, 0) + (1 if has_video_feature else 0),
-        }
-
-        limits_by_plan = {
-            "free": {"tokens": 50000, "images": 40, "videos": 2},
-            "pro": {"tokens": 1000000, "images": 600, "videos": 40},
-            "enterprise": {"tokens": None, "images": None, "videos": None},
-        }
-        limits = limits_by_plan.get(plan_tier, limits_by_plan["free"])
+        period = resolve_usage_period(account, now)
+        limits = get_plan_limits(plan_tier)
+        totals = get_usage_totals(account, period)
 
         buckets = [
             _build_usage_bucket(
                 key="tokens",
                 label="LLM Tokens",
-                used=usage_seed["tokens"],
+                used=totals["tokens"],
                 limit=limits["tokens"],
                 unit="tokens",
-                reset_window="monthly",
+                reset_window="billing_cycle",
             ),
             _build_usage_bucket(
                 key="images",
                 label="Image Generations",
-                used=usage_seed["images"],
+                used=totals["images"],
                 limit=limits["images"],
                 unit="images",
-                reset_window="monthly",
+                reset_window="billing_cycle",
             ),
             _build_usage_bucket(
                 key="videos",
                 label="Video Generations",
-                used=usage_seed["videos"],
+                used=totals["videos"],
                 limit=limits["videos"],
                 unit="videos",
-                reset_window="monthly",
+                reset_window="billing_cycle",
             ),
         ]
 
         return Response(
             {
-                "period": "current_month",
+                "period": "current_billing_cycle",
+                "period_start": period.start.isoformat(),
+                "period_end": period.end.isoformat(),
+                "period_source": period.source,
                 "plan_tier": plan_tier,
                 "buckets": buckets,
+                "billing_sync": billing_sync,
                 "notes": [
-                    "Usage values are starter placeholders until you stream provider telemetry.",
-                    "Map entitlement keys to provider limits before production launch.",
-                    "Webhook-verified subscriptions should remain the billing source of truth.",
+                    "Backend usage ledger is the source of truth for enforcement and dashboard reporting.",
+                    "Frontend token estimation is optimistic and may differ from provider-reported usage.",
+                    "Billing-cycle resets follow subscription periods when available.",
                 ],
+            }
+        )
+
+
+class AiTokenEstimateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AiTokenEstimateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        model_name = str(payload.get("model") or "").strip() or str(getattr(settings, "AI_DEFAULT_CHAT_MODEL", ""))
+        messages = payload.get("messages") or []
+        text = str(payload.get("text") or "")
+        message_tokens = count_message_tokens(messages, model=model_name) if messages else 0
+        text_tokens = count_text_tokens(text, model=model_name) if text else 0
+
+        return Response(
+            {
+                "model": model_name,
+                "estimated_tokens": {
+                    "messages": message_tokens,
+                    "text": text_tokens,
+                    "total": message_tokens + text_tokens,
+                },
+                "notes": [
+                    "Estimate uses backend tokenizer and is used for preflight checks.",
+                    "Provider-reported usage still wins when available.",
+                ],
+            }
+        )
+
+
+class AiChatCompleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AiChatCompleteRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        provider = str(payload.get("provider") or _default_chat_provider()).strip().lower()
+        _ensure_provider_mode_allowed(provider)
+        model_name = str(payload.get("model") or "").strip() or _default_chat_model(provider)
+        max_output_tokens = int(payload.get("max_output_tokens") or 320)
+        messages = [
+            {
+                "role": item["role"],
+                "content": item["content"],
+                **({"name": item["name"]} if item.get("name") else {}),
+            }
+            for item in payload.get("messages", [])
+        ]
+
+        profile = get_request_profile(request)
+        account = get_request_customer_account(request)
+        claims = get_request_claims(request)
+        plan_tier = _resolve_plan_tier(profile, claims)
+        billing_sync = ensure_billing_sync(account)
+        if billing_sync.get("blocking"):
+            return _billing_sync_blocked_response(billing_sync)
+
+        try:
+            completion = run_chat(
+                provider=provider,
+                messages=messages,
+                model_name=model_name,
+                max_output_tokens=max_output_tokens,
+            )
+        except ProviderExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        period = resolve_usage_period(account, django_timezone.now())
+        request_id = uuid4()
+
+        try:
+            usage_write = consume_usage_events(
+                account=account,
+                plan_tier=plan_tier,
+                period=period,
+                events=[
+                    {
+                        "request_id": request_id,
+                        "metric": "tokens",
+                        "direction": "input",
+                        "amount": completion.input_tokens,
+                        "provider": completion.provider,
+                        "model_name": completion.model_name,
+                        "metadata": {"endpoint": "ai/chat/complete"},
+                    },
+                    {
+                        "request_id": request_id,
+                        "metric": "tokens",
+                        "direction": "output",
+                        "amount": completion.output_tokens,
+                        "provider": completion.provider,
+                        "model_name": completion.model_name,
+                        "metadata": {"endpoint": "ai/chat/complete"},
+                    },
+                ],
+            )
+        except UsageLimitExceeded as exc:
+            return Response({"detail": str(exc)}, status=exc.status_code)
+
+        limits = usage_write["limits"]
+        totals = usage_write["totals"]
+        token_limit = limits.get("tokens")
+        token_used = totals.get("tokens", 0)
+        token_remaining = None if token_limit is None else max(int(token_limit) - int(token_used), 0)
+
+        notes = [
+            "Backend usage is authoritative for quota enforcement.",
+            "Requests are blocked when the cycle limit is exceeded.",
+        ]
+        if billing_sync.get("state") != "fresh":
+            notes.append(
+                f"Billing sync status is {billing_sync.get('state')} ({billing_sync.get('reason_code')})."
+            )
+
+        return Response(
+            {
+                "request_id": str(request_id),
+                "provider": completion.provider,
+                "model": completion.model_name,
+                "assistant_message": completion.content,
+                "usage": {
+                    "input_tokens": completion.input_tokens,
+                    "output_tokens": completion.output_tokens,
+                    "total_tokens": completion.input_tokens + completion.output_tokens,
+                    "cycle_tokens_used": token_used,
+                    "cycle_tokens_limit": token_limit,
+                    "cycle_tokens_remaining": token_remaining,
+                    "period_start": period.start.isoformat(),
+                    "period_end": period.end.isoformat(),
+                },
+                "billing_sync": billing_sync,
+                "notes": notes,
+            }
+        )
+
+
+class AiImageGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AiImageGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        provider = str(payload.get("provider") or _default_chat_provider()).strip().lower()
+        _ensure_provider_mode_allowed(provider)
+        model_name = str(payload.get("model") or "").strip() or _default_image_model(provider)
+        prompt = str(payload.get("prompt") or "").strip()
+        count = int(payload.get("count") or 1)
+        size = str(payload.get("size") or getattr(settings, "AI_DEFAULT_IMAGE_SIZE", "1024x1024")).strip()
+
+        profile = get_request_profile(request)
+        account = get_request_customer_account(request)
+        claims = get_request_claims(request)
+        plan_tier = _resolve_plan_tier(profile, claims)
+        billing_sync = ensure_billing_sync(account)
+        if billing_sync.get("blocking"):
+            return _billing_sync_blocked_response(billing_sync)
+
+        try:
+            image_result = run_images(
+                provider=provider,
+                prompt=prompt,
+                count=count,
+                model_name=model_name,
+                size=size,
+            )
+        except ProviderExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        period = resolve_usage_period(account, django_timezone.now())
+        request_id = uuid4()
+
+        try:
+            usage_write = consume_usage_events(
+                account=account,
+                plan_tier=plan_tier,
+                period=period,
+                events=[
+                    {
+                        "request_id": request_id,
+                        "metric": "images",
+                        "direction": "total",
+                        "amount": image_result.image_units,
+                        "provider": image_result.provider,
+                        "model_name": image_result.model_name,
+                        "metadata": {"endpoint": "ai/images/generate"},
+                    }
+                ],
+            )
+        except UsageLimitExceeded as exc:
+            return Response({"detail": str(exc)}, status=exc.status_code)
+
+        limits = usage_write["limits"]
+        totals = usage_write["totals"]
+        image_limit = limits.get("images")
+        image_used = totals.get("images", 0)
+        image_remaining = None if image_limit is None else max(int(image_limit) - int(image_used), 0)
+
+        notes = [
+            "Image quota uses one image = one usage unit.",
+            "Backend usage is authoritative for enforcement.",
+        ]
+        if billing_sync.get("state") != "fresh":
+            notes.append(
+                f"Billing sync status is {billing_sync.get('state')} ({billing_sync.get('reason_code')})."
+            )
+
+        return Response(
+            {
+                "request_id": str(request_id),
+                "provider": image_result.provider,
+                "model": image_result.model_name,
+                "images": image_result.images,
+                "usage": {
+                    "images_generated": image_result.image_units,
+                    "cycle_images_used": image_used,
+                    "cycle_images_limit": image_limit,
+                    "cycle_images_remaining": image_remaining,
+                    "period_start": period.start.isoformat(),
+                    "period_end": period.end.isoformat(),
+                },
+                "billing_sync": billing_sync,
+                "notes": notes,
             }
         )
 

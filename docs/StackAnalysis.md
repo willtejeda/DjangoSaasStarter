@@ -26,6 +26,7 @@ It is optimized for one thing first: getting to trustworthy revenue quickly.
 - Auth and billing complexity offloaded
 - Production-ready account and payment surfaces
 - Webhook events for server-side truth
+- Cached billing sync status endpoint with explicit refresh control (`/api/account/subscriptions/status/` and `?refresh=1`)
 
 ### Supabase
 

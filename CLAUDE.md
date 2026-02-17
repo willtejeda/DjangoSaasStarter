@@ -6,8 +6,9 @@ Core rules:
 
 1. Webhook-first payment fulfillment in production.
 2. Django owns schema and migrations.
-3. Keep non-essential demos in `/frontend/src/features/examples/`.
-4. Verify `/app` preflight before feature work.
+3. Subscription sync status endpoint is read-only by default and only refreshed explicitly with `?refresh=1`.
+4. Keep non-essential demos in `/frontend/src/features/examples/`.
+5. Verify `/app` preflight before feature work.
 
 Run before handoff:
 

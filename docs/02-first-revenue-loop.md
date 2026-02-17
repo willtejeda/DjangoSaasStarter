@@ -76,9 +76,12 @@ Digital product flow:
 
 Subscription flow:
 
-1. Recurring plan appears in `/account/subscriptions`
-2. Entitlements are populated
-3. `/api/ai/usage/summary/` returns usage buckets
+1. Recurring plan appears in `/account/subscriptions` (local projection, read-only)
+2. `/api/account/subscriptions/status/` reflects cached sync health
+3. Use `/api/account/subscriptions/status/?refresh=1` only for explicit retry from stale or error state
+4. Entitlements are populated
+5. `/api/ai/usage/summary/` returns usage buckets from backend usage ledger
+6. Optional: run `/api/ai/chat/complete/` with `provider=simulator` to validate token quota enforcement without provider costs
 
 Service flow:
 
@@ -95,6 +98,7 @@ Service flow:
 
 - Production fulfillment should rely on verified Clerk webhook events
 - Keep manual confirmation flags disabled in production
+- Keep subscription status endpoint read-only by default and refresh explicitly
 - Use Django migrations only for schema changes
 
 ## Common first monetization playbook

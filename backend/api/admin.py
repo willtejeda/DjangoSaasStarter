@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    AiUsageEvent,
     Booking,
     CustomerAccount,
     DigitalAsset,
@@ -140,3 +141,10 @@ class BookingAdmin(admin.ModelAdmin):
     list_display = ("customer_account", "service_offer", "status", "scheduled_start", "scheduled_end")
     search_fields = ("customer_account__billing_email", "service_offer__product__name")
     list_filter = ("status",)
+
+
+@admin.register(AiUsageEvent)
+class AiUsageEventAdmin(admin.ModelAdmin):
+    list_display = ("customer_account", "metric", "direction", "amount", "provider", "model_name", "created_at")
+    search_fields = ("customer_account__billing_email", "provider", "model_name")
+    list_filter = ("metric", "direction", "provider")

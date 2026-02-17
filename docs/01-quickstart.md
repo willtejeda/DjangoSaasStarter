@@ -56,6 +56,8 @@ SUPABASE_ANON_KEY=eyXXXX
 FRONTEND_APP_URL=http://127.0.0.1:5173
 RESEND_API_KEY=re_xxx
 RESEND_FROM_EMAIL=Acme <updates@yourdomain.com>
+BILLING_SYNC_SOFT_STALE_SECONDS=900
+BILLING_SYNC_HARD_TTL_SECONDS=10800
 ```
 
 ## 5. Schema ownership rule
@@ -79,7 +81,19 @@ Do not modify Django-managed tables directly in Supabase dashboard.
 
 Do not start product features until all checks pass.
 
-## 7. Health checks from CLI
+## 7. Billing sync contract quick check
+
+Use cached status for reads and explicit refresh only when needed:
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/api/account/subscriptions/status/"
+
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/api/account/subscriptions/status/?refresh=1"
+```
+
+## 8. Health checks from CLI
 
 ```bash
 curl http://127.0.0.1:8000/api/health/
@@ -88,7 +102,7 @@ curl http://127.0.0.1:8000/api/products/
 
 Expected fresh catalog response is `[]`.
 
-## 8. Start scripts
+## 9. Start scripts
 
 ```bash
 cd .
@@ -102,7 +116,7 @@ Flags:
 - `BACKEND_RUN_MIGRATIONS=false`
 - `FRONTEND_TYPECHECK_ON_START=false`
 
-## 9. Quality checks
+## 10. Quality checks
 
 ```bash
 cd ./backend

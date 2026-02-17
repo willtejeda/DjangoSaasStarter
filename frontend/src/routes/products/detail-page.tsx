@@ -18,9 +18,6 @@ import {
   sectionClass,
 } from '../../shared/ui-utils';
 
-const ENABLE_DEV_MANUAL_CHECKOUT =
-  (import.meta.env.VITE_ENABLE_DEV_MANUAL_CHECKOUT || '').trim().toLowerCase() === 'true';
-
 export function ProductDetailPage({ slug, signedIn, onNavigate, getToken }: ProductDetailProps): ReactElement {
   const notify = useToast();
   const [product, setProduct] = useState<ProductRecord | null>(null);
@@ -94,37 +91,13 @@ export function ProductDetailPage({ slug, signedIn, onNavigate, getToken }: Prod
         window.location.href = checkoutUrl;
         return;
       }
-
-      if (!ENABLE_DEV_MANUAL_CHECKOUT) {
-        setSuccess('Pending order created. Open Purchases to verify status while checkout URL is being configured.');
-        notify({
-          title: 'Pending order created',
-          detail: 'Checkout URL missing. Configure price metadata.checkout_url for Clerk-hosted checkout.',
-          variant: 'info',
-        });
-        onNavigate('/account/purchases');
-        return;
-      }
-
-      await authedRequest<unknown, { provider: string; external_id: string }>(
-        getToken,
-        `/account/orders/${publicId}/confirm/`,
-        {
-          method: 'POST',
-          body: {
-            provider: 'manual',
-            external_id: `manual_${Date.now()}`,
-          },
-        }
-      );
-
-      setSuccess('Purchase completed. Fulfillment has been created.');
+      setSuccess('Pending order created. Open Purchases to verify status while checkout URL is being configured.');
       notify({
-        title: 'Manual checkout confirmed',
-        detail: 'Order marked paid for local development mode.',
-        variant: 'success',
+        title: 'Pending order created',
+        detail: 'Checkout URL missing. Configure price metadata.checkout_url for Clerk-hosted checkout.',
+        variant: 'info',
       });
-      onNavigate('/checkout/success');
+      onNavigate('/account/purchases');
     } catch (requestError) {
       const detail = requestError instanceof Error ? requestError.message : 'Could not complete purchase flow.';
       setError(detail);

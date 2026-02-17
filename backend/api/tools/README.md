@@ -2,6 +2,7 @@
 
 `tools/` contains external integration and platform utility modules.
 
+- `ai/`: token counting, usage ledger enforcement, simulator mode, and provider adapters.
 - `auth/`: Clerk JWT verification, Clerk Backend SDK client, DRF auth integration.
 - `billing/`: claim parsing helpers and plan tier inference.
 - `database/`: Supabase client and configuration helpers.

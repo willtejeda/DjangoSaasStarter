@@ -27,6 +27,9 @@ Primary persona: Python developers, solo founders, and small teams that want a s
 - Generates entitlements, download grants, and fulfillment/work orders after successful payment
 - Provides signed-in account routes for purchases, subscriptions, downloads, and bookings/work orders
 - Includes AI provider and usage summary endpoints scaffolded for token, image, and video limits
+- Includes strict server-side AI usage enforcement with cycle-based token and image limits
+- Includes frontend optimistic token estimation (estimate-only) plus backend authoritative counting
+- Includes debug simulator endpoints for chat and image flows without provider spend
 - Includes preflight checks for auth sync, Supabase probe, email test, and payment flow readiness
 
 ### How it works (repo-evidenced architecture)
@@ -88,6 +91,18 @@ Background queue or worker architecture: Not found in repo.
 3. Fulfillment happens server-side only after verified payment.
 4. No secrets in git.
 5. `DJANGO_DEBUG=False` in production.
+
+## AI Usage Contract
+
+- Backend ledger events are source of truth for usage enforcement and billing logic.
+- Frontend token counts are optimistic estimates for UX feedback before submit.
+- Plan tier defaults are inferred from Clerk billing features synced from token claims.
+- Usage resets follow subscription cycle periods when available, with anchored fallback cycles.
+- `GET /api/account/subscriptions/` returns local projection records and does not trigger Clerk sync.
+- `GET /api/account/subscriptions/status/` is read-only cached status.
+- Use `GET /api/account/subscriptions/status/?refresh=1` only for explicit re-sync attempts.
+- Usage-generating AI endpoints block when billing sync reaches hard stale TTL.
+- Debug simulator mode should be enabled for local pipeline testing and disabled for production.
 
 ## Before building features
 

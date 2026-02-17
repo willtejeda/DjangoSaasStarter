@@ -58,6 +58,7 @@ The frontend is structured for fast onboarding by both humans and coding agents:
 
 - `./frontend/src/shared/types.ts`
 - `./frontend/src/shared/ui-utils.ts`
+- `./frontend/src/shared/token-estimator.ts`
 - `./frontend/src/lib/api.ts`
 - `./frontend/src/lib/signals.ts`
 
@@ -83,6 +84,47 @@ const pending = await authedRequest(getToken, '/account/orders/create/', {
 ```ts
 const usage = await authedRequest(getToken, '/ai/usage/summary/');
 ```
+
+### Read billing sync status (cached)
+
+```ts
+const syncStatus = await authedRequest(getToken, '/account/subscriptions/status/');
+```
+
+### Read subscriptions (local projection only)
+
+```ts
+const subscriptions = await authedRequest(getToken, '/account/subscriptions/');
+```
+
+### Retry billing sync only when stale
+
+```ts
+const refreshed = await authedRequest(getToken, '/account/subscriptions/status/?refresh=1');
+```
+
+### Run debug AI flow (simulator mode)
+
+```ts
+const debug = await authedRequest(getToken, '/ai/chat/complete/', {
+  method: 'POST',
+  body: {
+    provider: 'simulator',
+    model: 'gpt-4.1-mini',
+    messages: [{ role: 'user', content: 'Generate a test response.' }],
+  },
+});
+```
+
+### Frontend token preflight estimate
+
+```ts
+import { countChatTokensEstimate } from './frontend/src/shared/token-estimator';
+
+const estimated = await countChatTokensEstimate([{ role: 'user', content: 'My prompt' }], 'gpt-4.1-mini');
+```
+
+Use this estimate for UX only. Backend usage events and limits remain authoritative.
 
 ## UX rules
 

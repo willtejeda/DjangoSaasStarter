@@ -23,6 +23,9 @@ Update these first in `./frontend/src/routes/landing/page.tsx`.
   - download grant pages and storage integration
 - AI usage scaffolding:
   - `/api/ai/providers/`
+  - `/api/ai/tokens/estimate/`
+  - `/api/ai/chat/complete/`
+  - `/api/ai/images/generate/`
   - `/api/ai/usage/summary/`
 
 ### Keep for almost every SaaS
@@ -59,7 +62,45 @@ Update these first in `./frontend/src/routes/landing/page.tsx`.
 2. Configure one digital offer and one recurring plan
 3. Add your own entitlement keys
 4. Replace AI usage placeholders with real provider telemetry
-5. Add onboarding emails and support automations
+5. Keep frontend token preflight labeled as estimate and enforce limits on backend ledger events
+
+## Plan tier resolution default
+
+- Default behavior infers plan tier from Clerk billing features in token claims.
+- Backend remains source of truth for usage enforcement, independent of frontend estimates.
+- If your product requires stricter per-plan overrides, add explicit mapping on top of the default claim inference.
+
+## Starter AI quota defaults
+
+These are controlled by backend env flags and enforced server-side per usage cycle:
+
+- `AI_USAGE_LIMIT_FREE_TOKENS=100000`
+- `AI_USAGE_LIMIT_FREE_IMAGES=120`
+- `AI_USAGE_LIMIT_FREE_VIDEOS=2`
+- `AI_USAGE_LIMIT_PRO_TOKENS=1500000`
+- `AI_USAGE_LIMIT_PRO_IMAGES=1000`
+- `AI_USAGE_LIMIT_PRO_VIDEOS=40`
+
+These defaults are tuned to common creator-tool ranges and should be adjusted to your margin targets.
+
+## Billing sync windows
+
+Clerk remains the billing source of truth. Django keeps a local projection and re-syncs on demand.
+
+- `BILLING_SYNC_SOFT_STALE_SECONDS=900`
+- `BILLING_SYNC_HARD_TTL_SECONDS=10800`
+- `BILLING_SYNC_SOFT_WARNING_MESSAGE=...`
+- `BILLING_SYNC_HARD_BLOCK_MESSAGE=...`
+
+Recommended template defaults:
+
+1. Keep soft stale short for UX warning visibility.
+2. Keep hard TTL low enough to limit spend during provider sync outages.
+3. Block usage-generating AI endpoints on hard stale, but keep read-only account pages available.
+4. Keep `GET /account/subscriptions/` read-only local projection with no implicit sync side effects.
+5. Keep `GET /account/subscriptions/status/` read-only; use `?refresh=1` only for explicit retries.
+
+6. Add onboarding emails and support automations
 
 ## Add a new frontend page
 

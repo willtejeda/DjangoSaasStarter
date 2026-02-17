@@ -217,11 +217,45 @@ RESEND_REPLY_TO_EMAIL = config("RESEND_REPLY_TO_EMAIL", default="")
 RESEND_TIMEOUT_SECONDS = config("RESEND_TIMEOUT_SECONDS", cast=int, default=10)
 
 # AI integration placeholders (optional).
+OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
+OPENAI_BASE_URL = config("OPENAI_BASE_URL", default="https://api.openai.com/v1")
+OPENAI_DEFAULT_MODEL = config("OPENAI_DEFAULT_MODEL", default="gpt-4.1-mini")
+OPENAI_IMAGE_MODEL = config("OPENAI_IMAGE_MODEL", default="gpt-image-1")
 OPENROUTER_API_KEY = config("OPENROUTER_API_KEY", default="")
 OPENROUTER_BASE_URL = config("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
-OPENROUTER_DEFAULT_MODEL = config("OPENROUTER_DEFAULT_MODEL", default="")
+OPENROUTER_DEFAULT_MODEL = config("OPENROUTER_DEFAULT_MODEL", default="openai/gpt-4.1-mini")
+OPENROUTER_IMAGE_MODEL = config("OPENROUTER_IMAGE_MODEL", default="openai/gpt-image-1")
 OLLAMA_BASE_URL = config("OLLAMA_BASE_URL", default="http://127.0.0.1:11434")
 OLLAMA_MODEL = config("OLLAMA_MODEL", default="")
+OLLAMA_IMAGE_MODEL = config("OLLAMA_IMAGE_MODEL", default="")
+AI_SIMULATOR_ENABLED = config("AI_SIMULATOR_ENABLED", cast=bool, default=DEBUG)
+AI_PROVIDER_CALLS_ENABLED = config("AI_PROVIDER_CALLS_ENABLED", cast=bool, default=False)
+AI_USAGE_ENFORCEMENT_ENABLED = config("AI_USAGE_ENFORCEMENT_ENABLED", cast=bool, default=True)
+AI_PROVIDER_TIMEOUT_SECONDS = config("AI_PROVIDER_TIMEOUT_SECONDS", cast=int, default=45)
+AI_DEFAULT_CHAT_MODEL = config("AI_DEFAULT_CHAT_MODEL", default="gpt-4.1-mini")
+AI_DEFAULT_IMAGE_SIZE = config("AI_DEFAULT_IMAGE_SIZE", default="1024x1024")
+
+# Per-cycle usage limits (starter defaults tuned to common AI subscription ranges).
+AI_USAGE_LIMIT_FREE_TOKENS = config("AI_USAGE_LIMIT_FREE_TOKENS", cast=int, default=100000)
+AI_USAGE_LIMIT_FREE_IMAGES = config("AI_USAGE_LIMIT_FREE_IMAGES", cast=int, default=120)
+AI_USAGE_LIMIT_FREE_VIDEOS = config("AI_USAGE_LIMIT_FREE_VIDEOS", cast=int, default=2)
+AI_USAGE_LIMIT_PRO_TOKENS = config("AI_USAGE_LIMIT_PRO_TOKENS", cast=int, default=1500000)
+AI_USAGE_LIMIT_PRO_IMAGES = config("AI_USAGE_LIMIT_PRO_IMAGES", cast=int, default=1000)
+AI_USAGE_LIMIT_PRO_VIDEOS = config("AI_USAGE_LIMIT_PRO_VIDEOS", cast=int, default=40)
+
+# Billing sync freshness windows.
+# Soft window: allow requests but surface warnings while re-sync attempts run.
+# Hard TTL: block usage-generating requests until sync succeeds again.
+BILLING_SYNC_SOFT_STALE_SECONDS = config("BILLING_SYNC_SOFT_STALE_SECONDS", cast=int, default=900)
+BILLING_SYNC_HARD_TTL_SECONDS = config("BILLING_SYNC_HARD_TTL_SECONDS", cast=int, default=10800)
+BILLING_SYNC_SOFT_WARNING_MESSAGE = config(
+    "BILLING_SYNC_SOFT_WARNING_MESSAGE",
+    default="Billing sync is delayed. Usage enforcement still applies.",
+)
+BILLING_SYNC_HARD_BLOCK_MESSAGE = config(
+    "BILLING_SYNC_HARD_BLOCK_MESSAGE",
+    default="Billing verification is stale. Retry in a moment.",
+)
 
 # Order confirmation controls.
 # Keep client-side payment confirmation disabled by default; rely on verified webhooks.

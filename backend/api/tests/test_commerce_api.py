@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -17,6 +17,7 @@ from api.models import (
     Subscription,
     WebhookEvent,
 )
+from api.tools.auth.clerk import ClerkClientError
 from api.webhooks import handle_billing_checkout_upsert, handle_billing_payment_attempt_upsert
 
 
@@ -482,7 +483,7 @@ class CommerceApiTests(TestCase):
         self.assertEqual(subscription.status, Subscription.Status.ACTIVE)
         self.assertEqual(subscription.price_id, price.id)
 
-    def test_subscription_list_backfills_from_webhook_history_for_current_user(self):
+    def test_subscription_refresh_backfills_from_webhook_history_for_current_user(self):
         WebhookEvent.objects.create(
             provider=WebhookEvent.Provider.CLERK,
             event_id="evt_sub_backfill_1",
@@ -498,13 +499,16 @@ class CommerceApiTests(TestCase):
             },
         )
 
+        refresh_response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+
         response = self._request("get", "/api/account/subscriptions/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_backfill_1")
         self.assertEqual(response.data[0]["status"], Subscription.Status.ACTIVE)
 
-    def test_subscription_list_backfill_refreshes_existing_subscription_rows(self):
+    def test_subscription_refresh_backfill_updates_existing_subscription_rows(self):
         initial_response = self._request("get", "/api/account/subscriptions/")
         self.assertEqual(initial_response.status_code, 200)
 
@@ -530,6 +534,9 @@ class CommerceApiTests(TestCase):
             },
         )
 
+        refresh_response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+
         refreshed_response = self._request("get", "/api/account/subscriptions/")
         self.assertEqual(refreshed_response.status_code, 200)
 
@@ -542,6 +549,242 @@ class CommerceApiTests(TestCase):
                 for row in refreshed_response.data
             )
         )
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_refresh_backfills_from_clerk_api_when_webhook_history_is_empty(self, mock_get_clerk_client):
+        owner = Profile.objects.create(clerk_user_id="seller_clerk_api_1", email="seller-clerk-api-1@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Growth Plan",
+            slug="growth-plan-clerk-api",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        price = Price.objects.create(
+            product=product,
+            name="Growth Yearly",
+            amount_cents=9900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.YEARLY,
+            is_default=True,
+            is_active=True,
+            clerk_plan_id="plan_growth_2026",
+        )
+
+        mock_client = Mock()
+        mock_client.users.get_billing_subscription.return_value = {
+            "data": {
+                "id": "buyer_123",
+                "billing": {
+                    "subscription": {
+                        "id": "sub_clerk_api_1",
+                        "status": "active",
+                        "current_period_start": "2026-02-01T00:00:00.000Z",
+                        "current_period_end": "2027-02-01T00:00:00.000Z",
+                        "cancel_at_period_end": False,
+                        "plan": {"id": "plan_growth_2026"},
+                    }
+                },
+            }
+        }
+        mock_get_clerk_client.return_value = mock_client
+
+        refresh_response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+
+        response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_clerk_api_1")
+        self.assertEqual(response.data[0]["status"], Subscription.Status.ACTIVE)
+        self.assertEqual(response.data[0]["price"], price.id)
+
+        local_subscription = Subscription.objects.get(clerk_subscription_id="sub_clerk_api_1")
+        self.assertEqual(local_subscription.customer_account.profile.clerk_user_id, "buyer_123")
+        self.assertEqual(local_subscription.price_id, price.id)
+
+        mock_client.users.get_billing_subscription.assert_called_once_with(user_id="buyer_123")
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_refresh_backfills_from_clerk_api_even_when_local_rows_exist(self, mock_get_clerk_client):
+        owner = Profile.objects.create(clerk_user_id="seller_clerk_api_2", email="seller-clerk-api-2@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Pro Plan",
+            slug="pro-plan-clerk-api",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+        )
+        price = Price.objects.create(
+            product=product,
+            name="Pro Yearly",
+            amount_cents=19900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.YEARLY,
+            is_default=True,
+            is_active=True,
+            clerk_plan_id="plan_pro_2026",
+        )
+
+        account_response = self._request("get", "/api/account/customer/")
+        self.assertEqual(account_response.status_code, 200)
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        existing_subscription = Subscription.objects.create(
+            customer_account=buyer_profile.customer_account,
+            product=product,
+            price=price,
+            clerk_subscription_id="sub_clerk_api_existing_1",
+            status=Subscription.Status.CANCELED,
+        )
+
+        mock_client = Mock()
+        mock_client.users.get_billing_subscription.return_value = {
+            "data": {
+                "id": "buyer_123",
+                "billing": {
+                    "subscription": {
+                        "id": "sub_clerk_api_existing_1",
+                        "status": "active",
+                        "current_period_start": "2026-02-01T00:00:00.000Z",
+                        "current_period_end": "2027-02-01T00:00:00.000Z",
+                        "cancel_at_period_end": False,
+                        "plan": {"id": "plan_pro_2026"},
+                    }
+                },
+            }
+        }
+        mock_get_clerk_client.return_value = mock_client
+
+        refresh_response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+
+        response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_clerk_api_existing_1")
+        self.assertEqual(response.data[0]["status"], Subscription.Status.ACTIVE)
+
+        existing_subscription.refresh_from_db()
+        self.assertEqual(existing_subscription.status, Subscription.Status.ACTIVE)
+
+        mock_client.users.get_billing_subscription.assert_called_once_with(user_id="buyer_123")
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_refresh_marks_local_subscription_canceled_when_clerk_reports_no_subscription(
+        self,
+        mock_get_clerk_client,
+    ):
+        owner = Profile.objects.create(clerk_user_id="seller_clerk_api_3", email="seller-clerk-api-3@example.com")
+        product = Product.objects.create(
+            owner=owner,
+            name="Starter Plan",
+            slug="starter-plan-clerk-api",
+            visibility=Product.Visibility.PUBLISHED,
+            product_type=Product.ProductType.DIGITAL,
+            feature_keys=["starter_feature"],
+        )
+        price = Price.objects.create(
+            product=product,
+            name="Starter Monthly",
+            amount_cents=4900,
+            currency="USD",
+            billing_period=Price.BillingPeriod.MONTHLY,
+            is_default=True,
+            is_active=True,
+        )
+
+        account_response = self._request("get", "/api/account/customer/")
+        self.assertEqual(account_response.status_code, 200)
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        subscription = Subscription.objects.create(
+            customer_account=buyer_profile.customer_account,
+            product=product,
+            price=price,
+            clerk_subscription_id="sub_clerk_api_existing_2",
+            status=Subscription.Status.ACTIVE,
+        )
+
+        mock_client = Mock()
+        mock_client.users.get_billing_subscription.return_value = {
+            "data": {
+                "id": "buyer_123",
+                "billing": {"subscription": None},
+            }
+        }
+        mock_get_clerk_client.return_value = mock_client
+
+        refresh_response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+
+        response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_clerk_api_existing_2")
+        self.assertEqual(response.data[0]["status"], Subscription.Status.CANCELED)
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, Subscription.Status.CANCELED)
+        self.assertTrue(subscription.cancel_at_period_end)
+        self.assertIsNotNone(subscription.canceled_at)
+
+        mock_client.users.get_billing_subscription.assert_called_once_with(user_id="buyer_123")
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_sync_status_endpoint_returns_cached_state_without_refresh(self, mock_get_clerk_client):
+        response = self._request("get", "/api/account/subscriptions/status/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["state"], "hard_stale")
+        self.assertTrue(response.data["blocking"])
+        self.assertEqual(response.data["reason_code"], "never_synced")
+        self.assertIsNone(response.data.get("error_code"))
+        mock_get_clerk_client.assert_not_called()
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_list_is_read_only_and_does_not_call_clerk(self, mock_get_clerk_client):
+        mock_get_clerk_client.side_effect = ClerkClientError("should-not-call")
+        account_response = self._request("get", "/api/account/customer/")
+        self.assertEqual(account_response.status_code, 200)
+        buyer_profile = Profile.objects.get(clerk_user_id="buyer_123")
+        Subscription.objects.create(
+            customer_account=buyer_profile.customer_account,
+            status=Subscription.Status.ACTIVE,
+            clerk_subscription_id="sub_local_projection_1",
+        )
+
+        response = self._request("get", "/api/account/subscriptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["clerk_subscription_id"], "sub_local_projection_1")
+        mock_get_clerk_client.assert_not_called()
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_sync_status_endpoint_refresh_syncs_and_returns_fresh(self, mock_get_clerk_client):
+        mock_client = Mock()
+        mock_client.users.get_billing_subscription.return_value = {
+            "data": {
+                "id": "buyer_123",
+                "billing": {"subscription": None},
+            }
+        }
+        mock_get_clerk_client.return_value = mock_client
+
+        response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["state"], "fresh")
+        self.assertFalse(response.data["blocking"])
+        self.assertTrue(response.data["last_success_at"])
+        self.assertIsNone(response.data.get("error_code"))
+        mock_client.users.get_billing_subscription.assert_called_once_with(user_id="buyer_123")
+
+    @patch("api.views_modules.account.get_clerk_client")
+    def test_subscription_sync_status_endpoint_refresh_blocks_when_no_success_and_sync_fails(self, mock_get_clerk_client):
+        mock_get_clerk_client.side_effect = ClerkClientError("missing-secret")
+
+        response = self._request("get", "/api/account/subscriptions/status/?refresh=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["state"], "hard_stale")
+        self.assertTrue(response.data["blocking"])
+        self.assertEqual(response.data["error_code"], "clerk_client_unavailable")
 
     def test_payment_attempt_webhook_fulfills_pending_order(self):
         order = self._create_pending_order()
