@@ -2,6 +2,7 @@
 migrations 
 
 image.png
+RISK_ASSESSMENT.md
 
 # Logs
 logs
@@ -364,3 +365,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 docs/11-name-ideas.md
+output/pdf/djangostarter-app-summary.pdf
+tmp/pdfs/generate_app_summary_pdf.py
+tmp/pdfs/djangostarter-app-summary-render-1.png

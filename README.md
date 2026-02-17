@@ -9,6 +9,54 @@ Creators need cash flow.
 
 This stack helps you launch one reliable paid loop, verify it end to end, then scale.
 
+## App Summary
+
+### What it is
+
+DjangoStarter is a revenue-first SaaS starter that combines a Django + DRF backend with a React 19 + Vite frontend. It is built to help teams launch paid digital or service offers quickly while keeping payment verification and fulfillment server-side.
+
+### Who it's for
+
+Primary persona: Python developers, solo founders, and small teams that want a self-hosted-first app foundation with modern auth, billing, and checkout scaffolding already wired.
+
+### What it does
+
+- Supports digital and service product catalogs with server-driven prices and feature keys
+- Creates pending orders and tracks transactions for one-time and subscription purchases
+- Confirms payment via verified Clerk webhook events before fulfillment runs
+- Generates entitlements, download grants, and fulfillment/work orders after successful payment
+- Provides signed-in account routes for purchases, subscriptions, downloads, and bookings/work orders
+- Includes AI provider and usage summary endpoints scaffolded for token, image, and video limits
+- Includes preflight checks for auth sync, Supabase probe, email test, and payment flow readiness
+
+### How it works (repo-evidenced architecture)
+
+Components and services:
+
+- Frontend SPA: `frontend/src/main.tsx`, `frontend/src/app.tsx`, `frontend/src/routes/index.tsx`
+- Frontend API wrapper: `frontend/src/lib/api.ts`
+- Backend API routes: `backend/project_settings/urls.py`, `backend/api/urls.py`
+- Domain models: `backend/api/models/accounts.py`, `backend/api/models/catalog.py`, `backend/api/models/commerce.py`
+- Webhook verification and handlers: `backend/api/webhooks/receiver.py`, `backend/api/webhooks/handlers.py`
+- Integration adapters: `backend/api/tools/auth`, `backend/api/tools/billing`, `backend/api/tools/database`, `backend/api/tools/email`, `backend/api/tools/storage`
+
+Data flow:
+
+1. User loads the React app and signs in through Clerk.
+2. Frontend calls `/api/*` endpoints using `apiRequest` and `authedRequest`.
+3. Django view modules read and write product, order, subscription, entitlement, and fulfillment models.
+4. Clerk webhook events hit `/api/webhooks/clerk/`, are verified, deduplicated, and dispatched.
+5. Successful payment events update order state and trigger server-side fulfillment artifacts.
+6. Account routes read purchases, subscriptions, downloads, and work orders from backend APIs.
+
+Background queue or worker architecture: Not found in repo.
+
+### How to run (minimal)
+
+1. Backend: `cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cp .env.example .env && python3 manage.py migrate && python3 manage.py runserver`
+2. Frontend: `cd frontend && cp .env.example .env && npm install && npm run dev`
+3. Set `VITE_CLERK_PUBLISHABLE_KEY` in `frontend/.env` before frontend startup
+
 ## Who this is for
 
 - Python developers who want modern React UX without rebuilding auth or billing
