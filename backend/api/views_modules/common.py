@@ -191,19 +191,19 @@ class SupabaseProfileView(APIView):
         if not clerk_user_id:
             return Response({"ok": False, "detail": "Missing Clerk user id in token claims."}, status=400)
 
+        configured_table = str(getattr(settings, "SUPABASE_PROFILE_TABLE", "") or "").strip()
+        probe_tables: list[str] = []
+        for table_name in (configured_table, "api_profile", "profiles"):
+            normalized = str(table_name or "").strip()
+            if normalized and normalized not in probe_tables:
+                probe_tables.append(normalized)
+
         try:
             logger.debug("Running Supabase profile probe for user %s.", clerk_user_id)
             # Use anon-key probe mode by default. Forwarding Clerk JWTs to
             # PostgREST can fail unless Supabase JWT verification is configured
             # for that issuer.
             supabase = get_supabase_client()
-            result = (
-                supabase.table("profiles")
-                .select("*")
-                .eq("clerk_user_id", clerk_user_id)
-                .limit(1)
-                .execute()
-            )
         except SupabaseConfigurationError as exc:
             logger.warning("Supabase probe failed due to configuration: %s", exc)
             return Response(
@@ -213,34 +213,63 @@ class SupabaseProfileView(APIView):
                     **({"error": str(exc)} if settings.DEBUG else {}),
                 }
             )
-        except Exception as exc:  # pragma: no cover
-            error_text = str(exc)
-            if "PGRST301" in error_text or "wrong key type" in error_text.lower():
-                logger.warning(
-                    "Supabase probe auth rejected for user %s. Check SUPABASE_ANON_KEY and PostgREST auth settings.",
-                    clerk_user_id,
+
+        last_exception: Exception | None = None
+        for table_name in probe_tables:
+            try:
+                result = (
+                    supabase.table(table_name)
+                    .select("*")
+                    .eq("clerk_user_id", clerk_user_id)
+                    .limit(1)
+                    .execute()
                 )
-            else:
-                logger.exception("Unexpected error during Supabase profile probe for user %s.", clerk_user_id)
+            except Exception as exc:  # pragma: no cover
+                error_text = str(exc)
+                if "PGRST205" in error_text:
+                    # Table does not exist in schema cache. Try next candidate.
+                    logger.debug("Supabase probe table %s unavailable for user %s.", table_name, clerk_user_id)
+                    last_exception = exc
+                    continue
+
+                if "PGRST301" in error_text or "wrong key type" in error_text.lower():
+                    logger.warning(
+                        "Supabase probe auth rejected for user %s. Check SUPABASE_ANON_KEY and PostgREST auth settings.",
+                        clerk_user_id,
+                    )
+                else:
+                    logger.exception("Unexpected error during Supabase profile probe for user %s.", clerk_user_id)
+                return Response(
+                    {
+                        "ok": False,
+                        "detail": "Supabase probe failed. Confirm table and RLS setup.",
+                        **({"error": str(exc)} if settings.DEBUG else {}),
+                    }
+                )
+
+            data = getattr(result, "data", None)
+            profile = data[0] if isinstance(data, list) and data else data
             return Response(
                 {
-                    "ok": False,
-                    "detail": "Supabase probe failed. Confirm table and RLS setup.",
-                    **({"error": str(exc)} if settings.DEBUG else {}),
+                    "ok": True,
+                    "detail": (
+                        "Supabase profile probe succeeded."
+                        if profile
+                        else "Supabase probe succeeded. No profile row found yet."
+                    ),
+                    "profile": profile,
+                    "source_table": table_name,
                 }
             )
 
-        data = getattr(result, "data", None)
-        profile = data[0] if isinstance(data, list) and data else data
+        detail = "Supabase probe failed. Could not find a profile table in schema cache."
+        if probe_tables:
+            detail = f"{detail} Tried: {', '.join(probe_tables)}."
         return Response(
             {
-                "ok": True,
-                "detail": (
-                    "Supabase profile probe succeeded."
-                    if profile
-                    else "Supabase probe succeeded. No profile row found yet."
-                ),
-                "profile": profile,
+                "ok": False,
+                "detail": detail,
+                **({"error": str(last_exception)} if settings.DEBUG and last_exception else {}),
             }
         )
 
