@@ -640,33 +640,75 @@ def _to_plain_data(value: Any, *, _depth: int = 0) -> Any:
     return value
 
 
+def _looks_like_subscription_payload(payload: dict[str, Any]) -> bool:
+    subscription_id = str(payload.get("id") or payload.get("subscription_id") or "").strip()
+    if subscription_id.startswith("sub_"):
+        return True
+
+    status = str(payload.get("status") or "").strip()
+    if not status:
+        return False
+
+    subscription_keys = (
+        "current_period_start",
+        "current_period_end",
+        "period_start",
+        "period_end",
+        "starts_at",
+        "ends_at",
+        "cancel_at_period_end",
+        "canceled_at",
+        "cancelled_at",
+        "plan",
+        "plan_id",
+        "price_id",
+        "items",
+        "subscription_items",
+    )
+    return any(key in payload for key in subscription_keys)
+
+
+def _append_subscription_payload_if_dict(payloads: list[dict[str, Any]], candidate: Any) -> None:
+    if isinstance(candidate, dict) and _looks_like_subscription_payload(candidate):
+        payloads.append(candidate)
+
+
 def _extract_subscription_payloads_from_clerk_response(raw_response: Any) -> list[dict[str, Any]]:
     normalized = _to_plain_data(raw_response)
-    if not isinstance(normalized, dict):
+    roots: list[dict[str, Any]] = []
+    if isinstance(normalized, dict):
+        roots.append(normalized)
+        data = normalized.get("data")
+        if isinstance(data, dict):
+            roots.append(data)
+        elif isinstance(data, list):
+            roots.extend(item for item in data if isinstance(item, dict))
+    elif isinstance(normalized, list):
+        roots.extend(item for item in normalized if isinstance(item, dict))
+    else:
         return []
-
-    roots: list[dict[str, Any]] = [normalized]
-    data = normalized.get("data")
-    if isinstance(data, dict):
-        roots.append(data)
 
     payloads: list[dict[str, Any]] = []
     for root in roots:
+        _append_subscription_payload_if_dict(payloads, root)
+
         direct_subscription = root.get("subscription")
-        if isinstance(direct_subscription, dict):
-            payloads.append(direct_subscription)
+        _append_subscription_payload_if_dict(payloads, direct_subscription)
 
         billing = root.get("billing")
         if isinstance(billing, dict):
             nested_subscription = billing.get("subscription")
-            if isinstance(nested_subscription, dict):
-                payloads.append(nested_subscription)
+            _append_subscription_payload_if_dict(payloads, nested_subscription)
+
+            nested_billing_subscriptions = billing.get("subscriptions")
+            if isinstance(nested_billing_subscriptions, list):
+                for payload in nested_billing_subscriptions:
+                    _append_subscription_payload_if_dict(payloads, payload)
 
         nested_subscriptions = root.get("subscriptions")
         if isinstance(nested_subscriptions, list):
-            payloads.extend(
-                payload for payload in nested_subscriptions if isinstance(payload, dict)
-            )
+            for payload in nested_subscriptions:
+                _append_subscription_payload_if_dict(payloads, payload)
 
     deduped_payloads: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -682,21 +724,48 @@ def _extract_subscription_payloads_from_clerk_response(raw_response: Any) -> lis
 
 def _clerk_response_explicitly_has_no_subscription(raw_response: Any) -> bool:
     normalized = _to_plain_data(raw_response)
-    if not isinstance(normalized, dict):
+    roots: list[dict[str, Any]] = []
+    if isinstance(normalized, dict):
+        roots.append(normalized)
+        data = normalized.get("data")
+        if isinstance(data, dict):
+            roots.append(data)
+        elif isinstance(data, list):
+            roots.extend(item for item in data if isinstance(item, dict))
+    elif isinstance(normalized, list):
+        roots.extend(item for item in normalized if isinstance(item, dict))
+    else:
         return False
 
-    roots: list[dict[str, Any]] = [normalized]
-    data = normalized.get("data")
-    if isinstance(data, dict):
-        roots.append(data)
-
     for root in roots:
+        if _looks_like_subscription_payload(root):
+            continue
+
         if "subscription" in root and root.get("subscription") is None:
             return True
 
         billing = root.get("billing")
-        if isinstance(billing, dict) and "subscription" in billing and billing.get("subscription") is None:
-            return True
+        if isinstance(billing, dict):
+            if "subscription" in billing and billing.get("subscription") is None:
+                return True
+
+            billing_subscriptions = billing.get("subscriptions")
+            if isinstance(billing_subscriptions, list):
+                has_subscription_payload = any(
+                    isinstance(payload, dict) and _looks_like_subscription_payload(payload)
+                    for payload in billing_subscriptions
+                )
+                if not has_subscription_payload:
+                    return True
+
+        if "subscriptions" in root and isinstance(root.get("subscriptions"), list):
+            root_subscriptions = root.get("subscriptions") or []
+            has_subscription_payload = any(
+                isinstance(payload, dict) and _looks_like_subscription_payload(payload)
+                for payload in root_subscriptions
+            )
+            if not has_subscription_payload:
+                return True
 
     return False
 

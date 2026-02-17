@@ -1,8 +1,9 @@
 import { SignedIn } from '@clerk/clerk-react';
 import { SubscriptionDetailsButton } from '@clerk/clerk-react/experimental';
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { PageIntro, StatusPill, TutorialBlock } from '../../../components/layout/app-shell';
+import { useToast } from '../../../components/feedback/toast';
 import { authedRequest } from '../../../lib/api';
 import type { BillingSyncStatus, SubscriptionRecord, TokenNavigateProps } from '../../../shared/types';
 import {
@@ -27,6 +28,8 @@ const DEFAULT_BILLING_SYNC: BillingSyncStatus = {
   hard_ttl_seconds: 10800,
 };
 
+const AUTO_SYNC_REASON_CODES = new Set(['no_subscription_payload', 'no_active_subscription', 'synced_with_partial_errors']);
+
 function formatSyncTime(value?: string | null): string {
   const raw = String(value || '').trim();
   if (!raw) {
@@ -40,28 +43,83 @@ function formatSyncTime(value?: string | null): string {
 }
 
 export function AccountSubscriptionsPage({ getToken, onNavigate }: TokenNavigateProps): ReactElement {
+  const notify = useToast();
+  const autoSyncAttemptedRef = useRef(false);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
   const [billingSync, setBillingSync] = useState<BillingSyncStatus>(DEFAULT_BILLING_SYNC);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
+
+  const syncFromClerk = async (): Promise<void> => {
+    setSyncing(true);
+    setError('');
+    try {
+      const refreshedBillingSync = await authedRequest<BillingSyncStatus>(getToken, '/account/subscriptions/status/?refresh=1');
+      const refreshedSubscriptions = await authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/');
+      const normalizedSubscriptions = Array.isArray(refreshedSubscriptions) ? refreshedSubscriptions : [];
+      setBillingSync(refreshedBillingSync || DEFAULT_BILLING_SYNC);
+      setSubscriptions(normalizedSubscriptions);
+      notify({
+        title: normalizedSubscriptions.length ? 'Subscription sync updated' : 'No subscriptions found in Clerk',
+        detail: normalizedSubscriptions.length
+          ? 'Local records now match the latest billing sync.'
+          : 'No recurring subscription payload is currently available for this account.',
+        variant: 'info',
+      });
+    } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : 'Could not sync subscriptions.';
+      setError(detail);
+      notify({
+        title: 'Subscription sync failed',
+        detail,
+        variant: 'error',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
     const loadSubscriptions = async (): Promise<void> => {
       try {
         const subscriptionsPayload = await authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/');
+        const normalizedSubscriptions = Array.isArray(subscriptionsPayload) ? subscriptionsPayload : [];
         if (!active) {
           return;
         }
-        setSubscriptions(Array.isArray(subscriptionsPayload) ? subscriptionsPayload : []);
+        setSubscriptions(normalizedSubscriptions);
 
-        const billingSyncPayload = await authedRequest<BillingSyncStatus>(getToken, '/account/subscriptions/status/').catch(
-          () => DEFAULT_BILLING_SYNC
-        );
+        let billingSyncPayload =
+          (await authedRequest<BillingSyncStatus>(getToken, '/account/subscriptions/status/').catch(
+            () => DEFAULT_BILLING_SYNC
+          )) || DEFAULT_BILLING_SYNC;
+
+        const shouldAutoSync =
+          !autoSyncAttemptedRef.current
+          && normalizedSubscriptions.length === 0
+          && !billingSyncPayload.blocking
+          && AUTO_SYNC_REASON_CODES.has(String(billingSyncPayload.reason_code || '').trim().toLowerCase());
+
+        if (shouldAutoSync) {
+          autoSyncAttemptedRef.current = true;
+          billingSyncPayload =
+            (await authedRequest<BillingSyncStatus>(getToken, '/account/subscriptions/status/?refresh=1').catch(
+              () => billingSyncPayload
+            )) || billingSyncPayload;
+          const refreshedSubscriptions = await authedRequest<SubscriptionRecord[]>(getToken, '/account/subscriptions/').catch(
+            () => normalizedSubscriptions
+          );
+          if (!active) {
+            return;
+          }
+          setSubscriptions(Array.isArray(refreshedSubscriptions) ? refreshedSubscriptions : []);
+        }
         if (!active) {
           return;
         }
-        setBillingSync(billingSyncPayload || DEFAULT_BILLING_SYNC);
+        setBillingSync(billingSyncPayload);
       } catch (requestError) {
         if (!active) {
           return;
@@ -113,7 +171,19 @@ export function AccountSubscriptionsPage({ getToken, onNavigate }: TokenNavigate
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Billing sync status</h3>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{billingSync.detail}</p>
           </div>
-          <StatusPill value={billingSync.state} />
+          <div className="flex flex-col items-end gap-2">
+            <StatusPill value={billingSync.state} />
+            <button
+              type="button"
+              className={cn(buttonSecondary, 'h-8 px-3 py-1 text-xs')}
+              onClick={() => {
+                void syncFromClerk();
+              }}
+              disabled={syncing || loading}
+            >
+              {syncing ? 'Syncing...' : 'Sync from Clerk'}
+            </button>
+          </div>
         </div>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Last synced: {formatSyncTime(billingSync.last_success_at)} | reason: {billingSync.reason_code}
@@ -126,13 +196,25 @@ export function AccountSubscriptionsPage({ getToken, onNavigate }: TokenNavigate
 
       {!loading && subscriptions.length === 0 ? (
         <article className={cardClass}>
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No active subscriptions found</h3>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">No subscription records synced yet</h3>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Add one recurring plan and complete checkout to validate this surface.
+            This view renders local records. If Clerk shows an active plan, run sync now to pull the latest state.
           </p>
-          <button type="button" className={cn(buttonPrimary, 'mt-4')} onClick={() => onNavigate('/pricing')}>
-            Open Pricing
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={buttonSecondary}
+              onClick={() => {
+                void syncFromClerk();
+              }}
+              disabled={syncing}
+            >
+              {syncing ? 'Syncing...' : 'Sync from Clerk'}
+            </button>
+            <button type="button" className={buttonPrimary} onClick={() => onNavigate('/pricing')}>
+              Open Pricing
+            </button>
+          </div>
         </article>
       ) : null}
 
